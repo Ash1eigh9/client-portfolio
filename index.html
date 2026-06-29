@@ -1272,7 +1272,7 @@ function openInvestmentForm(id){
   const productOpts = HSBC_ILP_PRODUCTS.map(function(p){
     return '<option value="'+esc(p)+'"'+(inv && inv.product === p ? ' selected' : '')+'>'+esc(p)+'</option>';
   }).join('');
-  openModal('<div class="modal-header"><h3>'+(inv ? 'Edit' : 'Add')+' Portfolio</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
+  showModal('<div class="modal-header"><h3>'+(inv ? 'Edit' : 'Add')+' Portfolio</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
     +'<form id="invForm">'
     +'<label>Client<select name="clientId" required style="margin-top:4px;">'+clientOpts+'</select></label>'
     +'<label style="margin-top:12px;">HSBC ILP Product<select name="product" required style="margin-top:4px;">'+productOpts+'</select></label>'
@@ -1310,7 +1310,7 @@ function openFundForm(invId, fundId){
   const currOpts = ['USD','SGD','HKD','EUR','GBP'].map(function(c){
     return '<option value="'+c+'"'+(fund && fund.currency===c ? ' selected' : '')+'>'+c+'</option>';
   }).join('');
-  openModal('<div class="modal-header"><h3>'+(fund ? 'Edit' : 'Add')+' Fund</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
+  showModal('<div class="modal-header"><h3>'+(fund ? 'Edit' : 'Add')+' Fund</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
     +'<form id="fundForm">'
     +'<label>Fund Name<input name="name" value="'+esc(fund ? fund.name||'' : '')+'" placeholder="e.g. Fidelity Global Technology" required></label>'
     +'<label style="margin-top:12px;">ISIN <span style="color:var(--ink-faint);font-size:11px;">(for live NAV)</span><input name="isin" value="'+esc(fund ? fund.isin||'' : '')+'" placeholder="e.g. LU0095077415" style="text-transform:uppercase;"></label>'
