@@ -1178,8 +1178,9 @@ function investmentCard(inv){
     totalInvested += Number(f.units||0) * Number(f.purchaseNav||0);
     totalValue += Number(f.units||0) * Number(f.latestNav || f.purchaseNav || 0);
   });
-  var premiumsSGD = 0;
-  funds.forEach(function(f){ premiumsSGD += Number(f.costSGD||0); });
+  const linkedPremCard = getLinkedPremiums(inv);
+  var premiumsSGD = linkedPremCard ? linkedPremCard.total : 0;
+  if(!premiumsSGD){ funds.forEach(function(f){ premiumsSGD += Number(f.costSGD||0); }); }
   if(!premiumsSGD){
     const PREM = ['basic regular premium','bonus unit','single premium','top-up','top up'];
     (inv.transactions||[]).forEach(function(t){
@@ -1226,14 +1227,15 @@ function renderInvestmentDetail(main){
   const funds = inv.funds || [];
   const txns  = (inv.transactions || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
   const clientName = (clients.find(function(c){ return c.id === inv.clientId; }) || {}).name || inv.clientId || '—';
-  // Totals — cost always in SGD (from transaction policy currency amounts)
+  // Premiums paid — linked policy is the authoritative source
+  const linkedPrem = getLinkedPremiums(inv);
   var totalCostSGD = 0, totalFundCost = 0, totalFundValue = 0;
   funds.forEach(function(f){
     totalCostSGD  += Number(f.costSGD||0);
     totalFundCost += Number(f.units||0) * Number(f.purchaseNav||0);
     totalFundValue+= Number(f.units||0) * Number(f.latestNav || f.purchaseNav || 0);
   });
-  // fallback: sum SGD from transactions if costSGD not stored yet
+  // fallback to transaction sum if costSGD not computed
   if(!totalCostSGD){
     const PREM = ['basic regular premium','bonus unit','single premium','top-up','top up'];
     (inv.transactions||[]).forEach(function(t){
@@ -1241,6 +1243,8 @@ function renderInvestmentDetail(main){
         totalCostSGD += Math.abs(Number(t.amount)||0);
     });
   }
+  // linked policy overrides everything for premiums paid display
+  const premiumsDisplay = linkedPrem ? linkedPrem.total : totalCostSGD;
   const rows = funds.map(function(f){
     const fCcy = f.currency || 'USD';
     const costSGD = Number(f.costSGD||0);
@@ -1288,7 +1292,7 @@ function renderInvestmentDetail(main){
     +'<h2 style="margin:0 0 4px;">'+esc(inv.product)+'</h2>'
     +'<div style="color:var(--ink-faint);font-size:13px;margin-bottom:20px;">'+esc(clientName)+' · Policy No: '+esc(inv.policyNo||'—')+' · '+esc(inv.currency||'SGD')+'</div>'
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;">'
-    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Premiums Paid (SGD)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(totalCostSGD)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">From transaction history</div></div>'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Premiums Paid (SGD)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(premiumsDisplay)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">'+(linkedPrem ? linkedPrem.numPayments+' payments from policy' : 'From transaction history')+'</div></div>'
     +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Cost (Fund Ccy)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+fmtMoney(totalFundCost)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Avg purchase NAV × net units</div></div>'
     +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Value (Fund Ccy)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+fmtMoney(totalFundValue)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Latest NAV × net units</div></div>'
     +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Gain / Loss</div><div style="font-size:20px;font-weight:700;margin-top:4px;" class="'+perfClass(totalFundGain)+'">'+(totalFundGain>=0?'+':'')+fmtMoney(totalFundGain)+'<br><small style="font-size:13px;">'+fmtPct(totalFundPct)+'</small></div></div>'
@@ -1543,37 +1547,91 @@ async function deleteTransaction(invId, txId){
 }
 
 /* ============================== INVESTMENTS — MODALS ============================== */
+function calcPremiumsPaid(policy){
+  if(!policy || !policy.premiumAmount) return { total: 0, numPayments: 0 };
+  const amount = Number(policy.premiumAmount);
+  if(policy.premiumFrequency === 'Single Premium') return { total: amount, numPayments: 1 };
+  if(!policy.inceptionDate) return { total: 0, numPayments: 0 };
+  const start = new Date(policy.inceptionDate + 'T00:00:00');
+  const today = new Date(); today.setHours(0,0,0,0);
+  if(start > today) return { total: 0, numPayments: 0 };
+  const monthsDiff = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+  const MPP = { Monthly:1, Quarterly:3, 'Semi-Annually':6, Annually:12 };
+  const mpp = MPP[policy.premiumFrequency] || 1;
+  const numPayments = Math.floor(monthsDiff / mpp) + 1;
+  return { total: parseFloat((numPayments * amount).toFixed(2)), numPayments: numPayments };
+}
+function buildInvPolicyOptions(clientId, selectedId){
+  const client = clients.find(function(c){ return c.id === clientId; });
+  if(!client || !(client.policies||[]).length) return '<option value="">— No policies found —</option>';
+  return '<option value="">— Select policy —</option>'
+    + client.policies.map(function(p){
+        const label = esc(p.name) + (p.policyNumber ? ' · '+esc(p.policyNumber) : '')
+          + (p.inceptionDate ? ' (from '+esc(fmtDate(p.inceptionDate))+')' : '');
+        return '<option value="'+esc(p.id)+'"'+(selectedId===p.id?' selected':'')+'>'+label+'</option>';
+      }).join('');
+}
+function getLinkedPremiums(inv){
+  if(!inv.linkedPolicyId) return null;
+  const client = clients.find(function(c){ return c.id === inv.clientId; });
+  const policy = client && (client.policies||[]).find(function(p){ return p.id === inv.linkedPolicyId; });
+  if(!policy) return null;
+  return calcPremiumsPaid(policy);
+}
 function openInvestmentForm(id){
   const inv = id ? investments.find(function(i){ return i.id === id; }) : null;
   editingInvestment = inv ? inv.id : null;
-  const clientOpts = clients.slice().sort(function(a,b){ return a.name.localeCompare(b.name); }).map(function(c){
-    return '<option value="'+esc(c.id)+'"'+(inv && inv.clientId === c.id ? ' selected' : '')+'>'+esc(c.name)+'</option>';
-  }).join('');
+  const clientOpts = '<option value="">— Select client —</option>'
+    + clients.slice().sort(function(a,b){ return a.name.localeCompare(b.name); }).map(function(c){
+      return '<option value="'+esc(c.id)+'"'+(inv && inv.clientId === c.id ? ' selected' : '')+'>'+esc(c.name)+'</option>';
+    }).join('');
   const productOpts = HSBC_ILP_PRODUCTS.map(function(p){
     return '<option value="'+esc(p)+'"'+(inv && inv.product === p ? ' selected' : '')+'>'+esc(p)+'</option>';
   }).join('');
+  const initPolicyOpts = inv && inv.clientId ? buildInvPolicyOptions(inv.clientId, inv.linkedPolicyId) : '<option value="">— Select client first —</option>';
   showModal('<div class="modal-header"><h3>'+(inv ? 'Edit' : 'Add')+' Portfolio</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
     +'<form id="invForm">'
-    +'<label>Client<select name="clientId" required style="margin-top:4px;">'+clientOpts+'</select></label>'
+    +'<label>Client<select name="clientId" id="invClientSel" required style="margin-top:4px;">'+clientOpts+'</select></label>'
+    +'<label style="margin-top:12px;">Linked Policy<select name="linkedPolicyId" id="invPolicySel" style="margin-top:4px;">'+initPolicyOpts+'</select>'
+    +'<div id="invPremCalc" style="font-size:12px;color:var(--ink-faint);margin-top:5px;min-height:16px;"></div></label>'
     +'<label style="margin-top:12px;">HSBC ILP Product<select name="product" required style="margin-top:4px;">'+productOpts+'</select></label>'
-    +'<label style="margin-top:12px;">Policy Number<input name="policyNo" value="'+esc(inv ? inv.policyNo||'' : '')+'" placeholder="e.g. P12345678"></label>'
-    +'<label style="margin-top:12px;">Base Currency<select name="currency" style="margin-top:4px;">'
-    +'<option value="SGD"'+(!inv||inv.currency==='SGD'?' selected':'')+'>SGD</option>'
-    +'<option value="USD"'+(inv&&inv.currency==='USD'?' selected':'')+'>USD</option>'
-    +'<option value="HKD"'+(inv&&inv.currency==='HKD'?' selected':'')+'>HKD</option>'
-    +'</select></label>'
+    +'<label style="margin-top:12px;">Policy Number <span style="font-size:11px;color:var(--ink-faint);">(auto-filled from policy)</span><input name="policyNo" id="invPolicyNo" value="'+esc(inv ? inv.policyNo||'' : '')+'" placeholder="e.g. P12345678"></label>'
     +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">'
     +'<button type="button" class="btn btn-sm" data-action="close-modal">Cancel</button>'
     +'<button type="submit" class="btn btn-primary">Save Portfolio</button>'
     +'</div></form>');
+
+  function refreshPolicyDropdown(clientId, keepPolicyId){
+    document.getElementById('invPolicySel').innerHTML = buildInvPolicyOptions(clientId, keepPolicyId||'');
+    refreshPremCalc(keepPolicyId||'', clientId);
+  }
+  function refreshPremCalc(policyId, clientId){
+    const calcEl = document.getElementById('invPremCalc');
+    const noEl   = document.getElementById('invPolicyNo');
+    const cid = clientId || document.getElementById('invClientSel').value;
+    if(!policyId){ calcEl.textContent = ''; return; }
+    const client = clients.find(function(c){ return c.id === cid; });
+    const policy = client && (client.policies||[]).find(function(p){ return p.id === policyId; });
+    if(!policy){ calcEl.textContent = ''; return; }
+    if(policy.policyNumber) noEl.value = policy.policyNumber;
+    const info = calcPremiumsPaid(policy);
+    calcEl.innerHTML = 'SGD '+fmtMoney(Number(policy.premiumAmount||0))+' × '+info.numPayments+' payments ('+esc(policy.premiumFrequency||'')
+      +') = <strong style="color:var(--ink);">SGD '+fmtMoney(info.total)+'</strong>';
+  }
+  document.getElementById('invClientSel').addEventListener('change', function(){ refreshPolicyDropdown(this.value, ''); });
+  document.getElementById('invPolicySel').addEventListener('change', function(){ refreshPremCalc(this.value); });
+  if(inv && inv.linkedPolicyId) refreshPremCalc(inv.linkedPolicyId, inv.clientId);
+
   document.getElementById('invForm').addEventListener('submit', async function(e){
     e.preventDefault();
     const fd = new FormData(e.target);
+    const linkedPolicyId = fd.get('linkedPolicyId')||'';
+    const fields = { clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), linkedPolicyId: linkedPolicyId };
     if(inv){
-      Object.assign(inv, { clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), currency: fd.get('currency') });
+      Object.assign(inv, fields);
       await saveOneInvestment(inv);
     } else {
-      const ni = { id: uid(), clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), currency: fd.get('currency'), funds: [], lastRefreshed: null };
+      const ni = Object.assign({ id: uid(), currency: 'SGD', funds: [], lastRefreshed: null }, fields);
       investments.push(ni);
       await saveOneInvestment(ni);
     }
