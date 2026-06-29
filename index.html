@@ -6,6 +6,9 @@
 <title>Casebook — Client &amp; Policy Register</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --ink:#16223A;
@@ -290,7 +293,20 @@
 </head>
 <body>
 
-<div class="app-shell" id="appShell">
+<div id="loginScreen" style="position:fixed;inset:0;background:#16223A;display:flex;align-items:center;justify-content:center;z-index:999;">
+  <div style="text-align:center;color:#fff;padding:40px;">
+    <div style="font-family:'Fraunces',serif;font-size:38px;font-weight:600;margin-bottom:6px;">Casebook</div>
+    <div style="font-size:12px;color:#9FB0C7;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:36px;">Client &amp; Policy Register</div>
+    <button id="signInBtn" style="background:#fff;color:#16223A;border:none;border-radius:10px;padding:14px 28px;font-size:15px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Sign in with Google
+    </button>
+    <p id="loginError" style="font-size:12.5px;color:#E87C73;margin-top:16px;min-height:18px;"></p>
+    <p style="font-size:11.5px;color:#7488A6;margin-top:8px;">Your data is private — only you can access it.</p>
+  </div>
+</div>
+
+<div class="app-shell" id="appShell" style="display:none;">
   <aside class="sidebar">
     <div class="brand">
       <div class="mark">Casebook</div>
@@ -310,7 +326,7 @@
         Settings
       </button>
     </nav>
-    <div class="sidebar-foot">Private workspace.<br>Data stored only for you.</div>
+    <div class="sidebar-foot" id="sidebarFoot">Private workspace.<br>Data stored only for you.</div>
   </aside>
 
   <main class="main" id="mainContent"></main>
@@ -327,6 +343,24 @@ window.addEventListener('error', (e) => {
   document.body.appendChild(box);
   setTimeout(() => box.remove(), 8000);
 });
+
+/* ============================== FIREBASE CONFIG ============================== */
+// Paste your Firebase config here after completing the setup steps
+const firebaseConfig = {
+  apiKey: "PASTE_YOUR_API_KEY_HERE",
+  authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
+  projectId: "PASTE_YOUR_PROJECT_ID_HERE",
+  storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
+  messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
+  appId: "PASTE_YOUR_APP_ID_HERE"
+};
+const FB_READY = !firebaseConfig.apiKey.startsWith('PASTE');
+let db = null, auth = null, currentUser = null;
+if(FB_READY){
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  auth = firebase.auth();
+}
 /* ============================== STATE ============================== */
 let clients = [];
 let categories = [];
@@ -360,18 +394,78 @@ const CATALOG_CATEGORIES = [...new Set(PRODUCT_CATALOG.map(p => p.category))];
 const HOSPITAL_INSURANCE_PRODUCTS = ['Enhanced IncomeShield', 'IncomeShield', 'IncomeShield Standard Plan'];
 
 /* ============================== STORAGE ============================== */
+function userRef(){ return db.collection('users').doc(currentUser.uid); }
+
 async function loadData(){
-  try{ const c = localStorage.getItem('casebook_clients'); clients = c ? JSON.parse(c) : []; }catch(e){ clients = []; }
-  try{ const cat = localStorage.getItem('casebook_categories'); categories = cat ? JSON.parse(cat) : []; }catch(e){ categories = []; }
-  try{ const s = localStorage.getItem('casebook_settings'); settings = s ? JSON.parse(s) : settings; }catch(e){ }
-  let catalogCatsChanged = false;
-  CATALOG_CATEGORIES.forEach(cat => { if(!categories.includes(cat)){ categories.push(cat); catalogCatsChanged = true; } });
-  if(catalogCatsChanged) await saveCategories();
+  if(currentUser && FB_READY){
+    try{
+      const [clientsSnap, settingsDoc] = await Promise.all([
+        userRef().collection('clients').get(),
+        userRef().collection('settings').doc('main').get()
+      ]);
+      clients = clientsSnap.docs.map(d => d.data());
+      if(settingsDoc.exists){
+        const d = settingsDoc.data();
+        categories = d.categories || [];
+        if(d.settings) Object.assign(settings, d.settings);
+      }
+    }catch(e){ toast('Error loading data: ' + e.message, 'danger'); }
+  } else {
+    try{ const c = localStorage.getItem('casebook_clients'); clients = c ? JSON.parse(c) : []; }catch(e){ clients = []; }
+    try{ const cat = localStorage.getItem('casebook_categories'); categories = cat ? JSON.parse(cat) : []; }catch(e){ categories = []; }
+    try{ const s = localStorage.getItem('casebook_settings'); if(s) Object.assign(settings, JSON.parse(s)); }catch(e){ }
+  }
+  let changed = false;
+  CATALOG_CATEGORIES.forEach(cat => { if(!categories.includes(cat)){ categories.push(cat); changed = true; } });
+  if(changed) await saveCategories();
   dataLoaded = true;
 }
-async function saveClients(){ try{ localStorage.setItem('casebook_clients', JSON.stringify(clients)); }catch(e){ toast('Could not save — storage may be full.', 'danger'); } }
-async function saveCategories(){ try{ localStorage.setItem('casebook_categories', JSON.stringify(categories)); }catch(e){ toast('Could not save categories.', 'danger'); } }
-async function saveSettings(){ try{ localStorage.setItem('casebook_settings', JSON.stringify(settings)); }catch(e){ toast('Could not save settings.', 'danger'); } }
+
+async function saveOneClient(client){
+  if(currentUser && FB_READY){
+    try{ await userRef().collection('clients').doc(client.id).set(client); }
+    catch(e){ toast('Cloud save failed: ' + e.message, 'danger'); }
+  }
+}
+
+async function deleteOneClient(id){
+  if(currentUser && FB_READY){
+    try{ await userRef().collection('clients').doc(id).delete(); }
+    catch(e){ toast('Cloud delete failed: ' + e.message, 'danger'); }
+  }
+}
+
+async function saveAllClients(){
+  if(!currentUser || !FB_READY) return;
+  const SIZE = 400;
+  try{
+    for(let i = 0; i < clients.length; i += SIZE){
+      const batch = db.batch();
+      clients.slice(i, i + SIZE).forEach(c => batch.set(userRef().collection('clients').doc(c.id), c));
+      await batch.commit();
+    }
+  }catch(e){ toast('Batch save failed: ' + e.message, 'danger'); }
+}
+
+async function saveClients(){ await saveAllClients(); }
+
+async function saveCategories(){
+  if(currentUser && FB_READY){
+    try{ await userRef().collection('settings').doc('main').set({ categories, settings }, { merge: true }); }
+    catch(e){ toast('Could not save categories.', 'danger'); }
+  } else {
+    try{ localStorage.setItem('casebook_categories', JSON.stringify(categories)); }catch(e){}
+  }
+}
+
+async function saveSettings(){
+  if(currentUser && FB_READY){
+    try{ await userRef().collection('settings').doc('main').set({ categories, settings }, { merge: true }); }
+    catch(e){ toast('Could not save settings.', 'danger'); }
+  } else {
+    try{ localStorage.setItem('casebook_settings', JSON.stringify(settings)); }catch(e){}
+  }
+}
 
 /* ============================== UTIL ============================== */
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
@@ -756,10 +850,10 @@ async function submitClientForm(){
     if(rawDob){ dobIso = parseFlexibleDate(rawDob); if(!dobIso) dobUnrecognised = true; }
     const data = { name: (f.get('name')||'').trim(), dob: dobIso, phone: (f.get('phone')||'').trim(), email: (f.get('email')||'').trim(), address: (f.get('address')||'').trim(), notes: (f.get('notes')||'').trim() };
     if(!data.name){ toast('Please fill in the required field: Full name.', 'danger'); const nameInput = document.getElementById('clientNameInput'); if(nameInput){ nameInput.style.borderColor = 'var(--red)'; nameInput.focus(); nameInput.addEventListener('input', () => { nameInput.style.borderColor = ''; }, { once: true }); } return; }
-    let newClientId = null;
-    if(editingClientId){ const c = findClient(editingClientId); Object.assign(c, data); }
-    else { newClientId = uid(); clients.push({ id: newClientId, ...data, policies: [], lastContactedDate: '', createdAt: new Date().toISOString() }); }
-    await saveClients(); closeModal();
+    let newClientId = null, clientToSave;
+    if(editingClientId){ const c = findClient(editingClientId); Object.assign(c, data); clientToSave = c; }
+    else { newClientId = uid(); clientToSave = { id: newClientId, ...data, policies: [], lastContactedDate: '', createdAt: new Date().toISOString() }; clients.push(clientToSave); }
+    await saveOneClient(clientToSave); closeModal();
     if(dobUnrecognised){ toast("Saved, but date of birth wasn't recognised and was left blank — edit the client to fix it.", 'danger'); }
     else { toast(editingClientId ? 'Client updated.' : 'Client added — now add their first policy.'); }
     if(newClientId){ view = { type: 'client-detail', clientId: newClientId }; render(); openPolicyForm(newClientId); }
@@ -771,7 +865,7 @@ async function deleteClient(id){
   const c = findClient(id); if(!c) return;
   const ok = await confirmModal('Delete ' + c.name + '?', 'This removes the client and all their policies permanently.');
   if(!ok) return;
-  clients = clients.filter(x => x.id !== id); await saveClients(); toast('Client deleted.'); view = { type: 'clients' }; render();
+  clients = clients.filter(x => x.id !== id); await deleteOneClient(id); toast('Client deleted.'); view = { type: 'clients' }; render();
 }
 
 /* ============================== MODALS: POLICY FORM ============================== */
@@ -863,7 +957,7 @@ async function submitPolicyForm(){
     c.policies = c.policies || [];
     if(policyId){ const p = c.policies.find(x=>x.id===policyId); Object.assign(p, data); }
     else { c.policies.push({ id: uid(), ...data, lastPaidDate: '' }); }
-    await saveClients(); closeModal();
+    await saveOneClient(c); closeModal();
     if(unrecognisedDates.length){ toast("Saved, but these dates weren't recognised and were left blank: " + unrecognisedDates.join(', ') + '.', 'danger'); }
     else { toast(policyId ? 'Policy updated.' : 'Policy added.'); }
     renderClientDetail(document.getElementById('mainContent'));
@@ -872,17 +966,17 @@ async function submitPolicyForm(){
 async function deletePolicy(clientId, policyId){
   const c = findClient(clientId); const p = (c.policies||[]).find(x=>x.id===policyId); if(!p) return;
   const ok = await confirmModal('Delete "' + p.name + '"?', "This removes the policy from this client's file permanently."); if(!ok) return;
-  c.policies = c.policies.filter(x => x.id !== policyId); await saveClients(); toast('Policy deleted.'); renderClientDetail(document.getElementById('mainContent'));
+  c.policies = c.policies.filter(x => x.id !== policyId); await saveOneClient(c); toast('Policy deleted.'); renderClientDetail(document.getElementById('mainContent'));
 }
 async function markPaid(clientId, policyId){
   const c = findClient(clientId); const p = (c.policies||[]).find(x=>x.id===policyId); if(!p || !p.premiumDueDate) return;
   const d = new Date(p.premiumDueDate + 'T00:00:00'); const map = { 'Monthly':1, 'Quarterly':3, 'Semi-Annually':6, 'Annually':12 }; const months = map[p.premiumFrequency] || 1;
   d.setMonth(d.getMonth() + months); p.lastPaidDate = new Date().toISOString().slice(0,10); p.premiumDueDate = d.toISOString().slice(0,10);
-  await saveClients(); toast('Marked paid — next due ' + fmtDate(p.premiumDueDate)); render();
+  await saveOneClient(c); toast('Marked paid — next due ' + fmtDate(p.premiumDueDate)); render();
 }
 async function markContact(clientId){
   const c = findClient(clientId); if(!c) return;
-  c.lastContactedDate = new Date().toISOString().slice(0,10); await saveClients(); toast('Logged contact with ' + c.name + '.'); render();
+  c.lastContactedDate = new Date().toISOString().slice(0,10); await saveOneClient(c); toast('Logged contact with ' + c.name + '.'); render();
 }
 
 /* ============================== MODAL / CONFIRM HELPERS ============================== */
@@ -950,10 +1044,50 @@ document.addEventListener('click', async (e) => {
   else if(action === 'save-settings'){ saveSettingsForm(); }
   else if(action === 'export-backup'){ exportBackup(); }
   else if(action === 'import-backup'){ document.getElementById('backupImportInput')?.click(); }
+  else if(action === 'sign-out'){ if(auth) auth.signOut(); }
 });
 
 /* ============================== INIT ============================== */
-(async function init(){ render(); await loadData(); render(); })();
+(async function init(){
+  if(!FB_READY){
+    // Firebase not configured yet — run offline with localStorage
+    render(); await loadData(); render();
+    return;
+  }
+  // Show login screen while we wait for auth state
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('appShell').style.display = 'none';
+
+  document.getElementById('signInBtn').addEventListener('click', async () => {
+    document.getElementById('loginError').textContent = '';
+    try{
+      await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    }catch(e){
+      document.getElementById('loginError').textContent = e.message || 'Sign-in failed. Please try again.';
+    }
+  });
+
+  auth.onAuthStateChanged(async (user) => {
+    if(user){
+      currentUser = user;
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appShell').style.display = 'flex';
+      document.getElementById('sidebarFoot').innerHTML =
+        `<div style="font-size:11px;color:#9FB0C7;margin-bottom:2px;">Signed in as</div>` +
+        `<div style="font-size:12px;color:#C7D0E0;word-break:break-all;margin-bottom:10px;">${esc(user.email)}</div>` +
+        `<button data-action="sign-out" style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:#C7D0E0;border-radius:6px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;width:100%;">Sign out</button>`;
+      render();
+      await loadData();
+      render();
+    } else {
+      currentUser = null;
+      dataLoaded = false;
+      clients = []; categories = []; settings = { advisorName:'', firmName:'', contact:'' };
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('appShell').style.display = 'none';
+    }
+  });
+})();
 </script>
 </body>
 </html>
