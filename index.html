@@ -1292,7 +1292,11 @@ function renderInvestmentDetail(main){
     +'<h2 style="margin:0 0 4px;">'+esc(inv.product)+'</h2>'
     +'<div style="color:var(--ink-faint);font-size:13px;margin-bottom:20px;">'+esc(clientName)+' · Policy No: '+esc(inv.policyNo||'—')+' · '+esc(inv.currency||'SGD')+'</div>'
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;">'
-    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Premiums Paid (SGD)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(premiumsDisplay)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">'+(linkedPrem ? linkedPrem.numPayments+' payments from policy' : 'From transaction history')+'</div></div>'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Premiums Paid (SGD)</div>'
+    +(premiumsDisplay
+      ? '<div style="font-size:20px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(premiumsDisplay)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">'+(linkedPrem ? linkedPrem.numPayments+' payments from policy' : 'From transaction history')+'</div>'
+      : '<div style="font-size:14px;color:var(--ink-faint);margin-top:6px;">—</div><div style="font-size:11px;color:var(--amber);margin-top:2px;">Edit portfolio to link a policy</div>')
+    +'</div>'
     +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Cost (Fund Ccy)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+fmtMoney(totalFundCost)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Avg purchase NAV × net units</div></div>'
     +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Value (Fund Ccy)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+fmtMoney(totalFundValue)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Latest NAV × net units</div></div>'
     +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Gain / Loss</div><div style="font-size:20px;font-weight:700;margin-top:4px;" class="'+perfClass(totalFundGain)+'">'+(totalFundGain>=0?'+':'')+fmtMoney(totalFundGain)+'<br><small style="font-size:13px;">'+fmtPct(totalFundPct)+'</small></div></div>'
@@ -1572,9 +1576,19 @@ function buildInvPolicyOptions(clientId, selectedId){
       }).join('');
 }
 function getLinkedPremiums(inv){
-  if(!inv.linkedPolicyId) return null;
   const client = clients.find(function(c){ return c.id === inv.clientId; });
-  const policy = client && (client.policies||[]).find(function(p){ return p.id === inv.linkedPolicyId; });
+  if(!client) return null;
+  const policies = client.policies || [];
+  let policy = null;
+  // 1. explicit link
+  if(inv.linkedPolicyId)
+    policy = policies.find(function(p){ return p.id === inv.linkedPolicyId; });
+  // 2. match by policy number
+  if(!policy && inv.policyNo)
+    policy = policies.find(function(p){ return p.policyNumber && p.policyNumber.trim() === inv.policyNo.trim(); });
+  // 3. match by product name
+  if(!policy && inv.product)
+    policy = policies.find(function(p){ return p.name && p.name.toLowerCase().includes(inv.product.toLowerCase()); });
   if(!policy) return null;
   return calcPremiumsPaid(policy);
 }
@@ -1588,7 +1602,17 @@ function openInvestmentForm(id){
   const productOpts = HSBC_ILP_PRODUCTS.map(function(p){
     return '<option value="'+esc(p)+'"'+(inv && inv.product === p ? ' selected' : '')+'>'+esc(p)+'</option>';
   }).join('');
-  const initPolicyOpts = inv && inv.clientId ? buildInvPolicyOptions(inv.clientId, inv.linkedPolicyId) : '<option value="">— Select client first —</option>';
+  // auto-detect linked policy if not explicitly set
+  var autoLinkedId = inv ? (inv.linkedPolicyId||'') : '';
+  if(inv && !autoLinkedId && inv.clientId){
+    const _cl = clients.find(function(c){ return c.id === inv.clientId; });
+    const _pols = _cl ? (_cl.policies||[]) : [];
+    var _found = null;
+    if(inv.policyNo) _found = _pols.find(function(p){ return p.policyNumber && p.policyNumber.trim()===inv.policyNo.trim(); });
+    if(!_found && inv.product) _found = _pols.find(function(p){ return p.name && p.name.toLowerCase().includes(inv.product.toLowerCase()); });
+    if(_found) autoLinkedId = _found.id;
+  }
+  const initPolicyOpts = inv && inv.clientId ? buildInvPolicyOptions(inv.clientId, autoLinkedId) : '<option value="">— Select client first —</option>';
   showModal('<div class="modal-header"><h3>'+(inv ? 'Edit' : 'Add')+' Portfolio</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
     +'<form id="invForm">'
     +'<label>Client<select name="clientId" id="invClientSel" required style="margin-top:4px;">'+clientOpts+'</select></label>'
@@ -1620,7 +1644,7 @@ function openInvestmentForm(id){
   }
   document.getElementById('invClientSel').addEventListener('change', function(){ refreshPolicyDropdown(this.value, ''); });
   document.getElementById('invPolicySel').addEventListener('change', function(){ refreshPremCalc(this.value); });
-  if(inv && inv.linkedPolicyId) refreshPremCalc(inv.linkedPolicyId, inv.clientId);
+  if(autoLinkedId) refreshPremCalc(autoLinkedId, inv ? inv.clientId : '');
 
   document.getElementById('invForm').addEventListener('submit', async function(e){
     e.preventDefault();
