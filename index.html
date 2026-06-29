@@ -271,6 +271,27 @@
   .mix-count{width:140px;text-align:right;font-family:var(--mono);font-size:12px;color:var(--ink-soft);flex-shrink:0;}
 
   /* ---------- responsive ---------- */
+  /* --- active tab looping animation --- */
+  @keyframes navActivePulse {
+    0%, 65%, 100% { background: rgba(255,255,255,0.09); }
+    82% { background: rgba(255,255,255,0.20); }
+  }
+  @keyframes navActiveBorder {
+    0%, 65%, 100% { border-left-color: #B8742B; box-shadow: none; }
+    82% { border-left-color: #E8A24A; box-shadow: 2px 0 12px rgba(184,116,43,0.5); }
+  }
+  @keyframes navActiveIcon {
+    0%, 55%, 100% { transform: translateY(0) scale(1); }
+    28% { transform: translateY(-3px) scale(1.15); }
+    42% { transform: translateY(0) scale(1.05); }
+  }
+  .nav-item.active {
+    animation: navActivePulse 2.8s ease-in-out infinite, navActiveBorder 2.8s ease-in-out infinite;
+  }
+  .nav-item.active svg {
+    animation: navActiveIcon 2.8s ease-in-out infinite;
+  }
+
   @media (max-width:860px){
     .app-shell{flex-direction:column;}
     .sidebar{
