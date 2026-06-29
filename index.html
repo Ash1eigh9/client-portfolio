@@ -1287,12 +1287,20 @@ function renderInvestmentDetail(main){
 
 /* ============================== INVESTMENTS — CSV IMPORT ============================== */
 function parseCSV(text){
-  // strip BOM and normalise line endings
   text = text.replace(/^﻿/, '').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
-  const lines = text.split('\n').filter(function(l){ return l.trim(); });
+  const allLines = text.split('\n');
+  // auto-detect the actual header row (HSBC files have 7 lines of company info before the data)
+  let headerIdx = 0;
+  for(var i = 0; i < Math.min(allLines.length, 25); i++){
+    const low = allLines[i].toLowerCase();
+    if(low.includes('fund name') || low.includes('transaction date') || low.includes('fund code')){
+      headerIdx = i; break;
+    }
+  }
+  const lines = allLines.slice(headerIdx).filter(function(l){ return l.trim() && !/^,+$/.test(l.trim()); });
   if(lines.length < 2) return { headers:[], rows:[] };
   const rawHeaders = splitCSVRow(lines[0]);
-  const headers = rawHeaders.map(function(h){ return h.trim().toLowerCase().replace(/[^a-z0-9 %.]/g,' ').replace(/\s+/g,' ').trim(); });
+  const headers = rawHeaders.map(function(h){ return h.replace(/^"|"$/g,'').trim().toLowerCase().replace(/[^a-z0-9 %.]/g,' ').replace(/\s+/g,' ').trim(); });
   const rows = lines.slice(1).map(function(line){
     const vals = splitCSVRow(line);
     const row = {};
@@ -1300,6 +1308,16 @@ function parseCSV(text){
     return row;
   });
   return { headers: headers, rows: rows };
+}
+function normalizeDate(d){
+  if(!d) return '';
+  // M/D/YYYY or MM/DD/YYYY → YYYY-MM-DD
+  const slash = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(slash) return slash[3]+'-'+slash[1].padStart(2,'0')+'-'+slash[2].padStart(2,'0');
+  // D/M/YYYY with 4-digit year already covered above; also handle DD-MM-YYYY
+  const dash = d.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if(dash) return dash[3]+'-'+dash[1].padStart(2,'0')+'-'+dash[2].padStart(2,'0');
+  return d; // already ISO or unknown — pass through
 }
 function splitCSVRow(line){
   const result = []; let inQuote = false, cur = '';
@@ -1409,16 +1427,20 @@ function openImportCSV(invId){
     } else {
       if(!inv.transactions) inv.transactions = [];
       rows.forEach(function(r){
-        const date = col(r,['date','transaction date','trans date','value date','effective date','trade date','process date']);
-        const fundName = col(r,['fund name','fund','fund description','description','sub fund','fund title']);
-        const txType = col(r,['type','transaction type','trans type','transaction','activity','trans. type','activity type']);
+        const rawDate = col(r,['transaction date','date','trans date','value date','effective date','trade date','process date']);
+        const date = normalizeDate(rawDate);
+        const fundName = col(r,['fund name','fund','fund title','sub fund']);
+        const txType = col(r,['description','type','transaction type','trans type','transaction','activity type','activity']);
         if(!date || !fundName){ skipped++; return; }
+        // skip pure disclaimer/footer rows (no recognisable date)
+        if(!/\d{4}/.test(date)){ skipped++; return; }
         const units = parseFloat(col(r,['units','unit','quantity','no of units','units transacted','debit units','credit units']).replace(/,/g,''))||0;
-        const price = parseFloat(col(r,['price per unit','price','unit price','nav','nav price','bid price','offer price','bid nav','offer nav']).replace(/,/g,''))||0;
-        const amount = parseFloat(col(r,['amount','amount sgd','amount (sgd)','sgd amount','gross amount','net amount','value','consideration']).replace(/,/g,''))||0;
+        const price = parseFloat(col(r,['price used','price per unit','price','unit price','nav','nav price','bid price','offer price']).replace(/,/g,''))||0;
+        const amount = parseFloat(col(r,['transaction amount in policy currency','amount','amount sgd','amount (sgd)','sgd amount','gross amount','net amount','value','consideration']).replace(/,/g,''))||0;
+        const fundCode = col(r,['fund code','isin','isin code']).toUpperCase();
         inv.transactions.push({
           id: uid(), date: date, fundName: fundName,
-          isin: col(r,['isin','isin code','fund code']).toUpperCase(),
+          isin: fundCode,
           type: txType || 'Transaction',
           units: units, price: price, amount: amount,
         });
