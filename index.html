@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casebook — Client &amp; Policy Register</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16223A;
+    --ink-soft:#3B4A63;
+    --ink-faint:#7C8AA3;
+    --paper:#F4F5F8;
+    --paper-raised:#FFFFFF;
+    --line:#DCE1E8;
+    --line-soft:#EAEDF1;
+    --green:#2F6F5E;
+    --green-soft:#E3F0EC;
+    --amber:#B8742B;
+    --amber-soft:#FAEBD9;
+    --red:#AE4438;
+    --red-soft:#F7E3E0;
+    --serif:'Fraunces', serif;
+    --sans:'Inter', sans-serif;
+    --mono:'IBM Plex Mono', monospace;
+    --r-sm:6px;
+    --r-md:10px;
+    --r-lg:16px;
+  }
+  *{box-sizing:border-box;}
+  svg{width:16px;height:16px;flex-shrink:0;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font-family:inherit;cursor:pointer;}
+  input,select,textarea{font-family:inherit;}
+  a{color:inherit;}
+  :focus-visible{outline:2px solid var(--green);outline-offset:2px;}
+
+  /* ---------- layout ---------- */
+  .app-shell{display:flex;min-height:100vh;}
+  .sidebar{
+    width:228px;flex-shrink:0;background:var(--ink);color:#E9ECF3;
+    display:flex;flex-direction:column;padding:24px 16px;
+    position:sticky;top:0;height:100vh;
+  }
+  .brand{padding:0 8px 22px 8px;border-bottom:1px solid rgba(255,255,255,0.12);margin-bottom:18px;}
+  .brand .mark{font-family:var(--serif);font-size:23px;font-weight:600;letter-spacing:0.2px;color:#fff;}
+  .brand .tag{font-size:11px;color:#9FB0C7;margin-top:4px;letter-spacing:0.3px;text-transform:uppercase;}
+  .nav{display:flex;flex-direction:column;gap:2px;}
+  .nav-item{
+    display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r-sm);
+    color:#C7D0E0;background:transparent;border:none;text-align:left;font-size:14px;font-weight:500;
+    border-left:3px solid transparent;width:100%;
+  }
+  .nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:0.85;}
+  .nav-item:hover{background:rgba(255,255,255,0.06);color:#fff;}
+  .nav-item.active{background:rgba(255,255,255,0.09);color:#fff;border-left-color:var(--amber);}
+  .sidebar-foot{margin-top:auto;padding:10px 8px 0;font-size:11px;color:#7488A6;border-top:1px solid rgba(255,255,255,0.1);padding-top:14px;}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .topbar{
+    padding:22px 32px 16px;display:flex;align-items:flex-end;justify-content:space-between;
+    gap:16px;flex-wrap:wrap;
+  }
+  .topbar h1{font-family:var(--serif);font-weight:600;font-size:26px;margin:0;color:var(--ink);}
+  .topbar .sub{color:var(--ink-faint);font-size:13px;margin-top:4px;}
+  .topbar-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  .content{padding:4px 32px 40px;flex:1;}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    display:inline-flex;align-items:center;gap:7px;border-radius:var(--r-sm);
+    padding:9px 15px;font-size:13.5px;font-weight:600;border:1px solid transparent;
+    transition:background .15s,border-color .15s;white-space:nowrap;
+  }
+  .btn svg{width:14px;height:14px;}
+  .btn-primary{background:var(--ink);color:#fff;}
+  .btn-primary:hover{background:#222F4A;}
+  .btn-accent{background:var(--green);color:#fff;}
+  .btn-accent:hover{background:#275C4D;}
+  .btn-ghost{background:transparent;color:var(--ink-soft);border-color:var(--line);}
+  .btn-ghost:hover{background:#fff;border-color:var(--ink-faint);}
+  .btn-danger{background:transparent;color:var(--red);border-color:var(--red-soft);}
+  .btn-danger:hover{background:var(--red-soft);}
+  .btn-sm{padding:6px 11px;font-size:12.5px;}
+  .icon-btn{
+    background:transparent;border:1px solid var(--line);border-radius:var(--r-sm);
+    width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;color:var(--ink-soft);
+  }
+  .icon-btn svg{width:16px;height:16px;flex-shrink:0;}
+  .icon-btn:hover{background:#fff;border-color:var(--ink-faint);}
+
+  /* ---------- cards / panels ---------- */
+  .panel{background:var(--paper-raised);border:1px solid var(--line);border-radius:var(--r-lg);}
+  .panel-head{padding:18px 20px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .panel-head h2{font-family:var(--serif);font-size:17px;font-weight:600;margin:0;}
+  .panel-body{padding:18px 20px;}
+
+  /* ---------- dashboard ---------- */
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}
+  .stat-card{background:var(--paper-raised);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px 20px;}
+  .stat-card .num{font-family:var(--serif);font-size:30px;font-weight:600;line-height:1;}
+  .stat-card .lbl{font-size:12.5px;color:var(--ink-faint);margin-top:6px;font-weight:500;}
+  .stat-card.warn .num{color:var(--amber);}
+  .stat-card.danger .num{color:var(--red);}
+  .stat-card.ok .num{color:var(--green);}
+
+  .reminder-row{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    padding:13px 0;border-bottom:1px solid var(--line-soft);
+  }
+  .reminder-row:last-child{border-bottom:none;}
+  .reminder-main{display:flex;align-items:center;gap:12px;min-width:0;}
+  .reminder-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .reminder-text .name{font-weight:600;font-size:14px;}
+  .reminder-text .meta{font-size:12.5px;color:var(--ink-faint);margin-top:2px;}
+  .reminder-meta{text-align:right;flex-shrink:0;}
+  .reminder-meta .date{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);}
+
+  /* ---------- badges ---------- */
+  .badge{
+    display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+    padding:3px 9px;border-radius:99px;letter-spacing:0.2px;
+  }
+  .badge.ok{background:var(--green-soft);color:var(--green);}
+  .badge.warn{background:var(--amber-soft);color:var(--amber);}
+  .badge.danger{background:var(--red-soft);color:var(--red);}
+  .badge.neutral{background:#EEF0F4;color:var(--ink-soft);}
+
+  /* ---------- search / filters ---------- */
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;}
+  .search-box{
+    display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);
+    border-radius:var(--r-sm);padding:8px 12px;min-width:220px;flex:1;max-width:340px;
+  }
+  .search-box svg{width:15px;height:15px;color:var(--ink-faint);flex-shrink:0;}
+  .search-box input{border:none;outline:none;font-size:13.5px;width:100%;background:transparent;}
+  select.filter-select{
+    border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 10px;font-size:13px;
+    background:#fff;color:var(--ink-soft);
+  }
+
+  /* ---------- client list ---------- */
+  .client-list{display:flex;flex-direction:column;}
+  .client-row{
+    display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:14px;align-items:center;
+    padding:14px 6px;border-bottom:1px solid var(--line-soft);cursor:pointer;
+  }
+  .client-row:hover{background:#FAFBFC;}
+  .client-row:last-child{border-bottom:none;}
+  .client-name{font-family:var(--serif);font-weight:600;font-size:15px;}
+  .client-sub{font-size:12px;color:var(--ink-faint);margin-top:2px;}
+  .mono-id{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);}
+  .col-label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.4px;color:var(--ink-faint);font-weight:600;}
+  .list-head{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:14px;padding:0 6px 8px;border-bottom:1px solid var(--line);margin-bottom:4px;}
+
+  /* ---------- empty state ---------- */
+  .empty-state{text-align:center;padding:60px 20px;color:var(--ink-faint);}
+  .empty-state svg{width:38px;height:38px;color:var(--line);margin-bottom:14px;}
+  .empty-state h3{font-family:var(--serif);color:var(--ink-soft);font-size:17px;margin:0 0 6px;}
+  .empty-state p{font-size:13.5px;margin:0 0 16px;}
+
+  /* ---------- dossier (client detail) ---------- */
+  .dossier-head{
+    background:var(--paper-raised);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:22px 24px;margin-bottom:20px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  }
+  .dossier-id-block{display:flex;flex-direction:column;gap:8px;}
+  .dossier-id-block .name{font-family:var(--serif);font-size:24px;font-weight:600;}
+  .dossier-fields{display:flex;gap:22px;flex-wrap:wrap;margin-top:10px;}
+  .dossier-field .col-label{display:block;margin-bottom:3px;}
+  .dossier-field .val{font-size:13.5px;color:var(--ink-soft);}
+  .dossier-actions{display:flex;gap:8px;align-self:flex-start;flex-wrap:wrap;}
+
+  .section-title{display:flex;align-items:center;justify-content:space-between;margin:26px 0 12px;}
+  .section-title h2{font-family:var(--serif);font-size:17px;font-weight:600;margin:0;}
+
+  /* ---------- policy cards ---------- */
+  .policy-card{
+    background:var(--paper-raised);border:1px solid var(--line);border-left:5px solid var(--ink-faint);
+    border-radius:var(--r-md);padding:16px 18px;margin-bottom:12px;
+  }
+  .policy-top{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:10px;}
+  .policy-title{font-weight:700;font-size:14.5px;}
+  .policy-insurer{font-size:12.5px;color:var(--ink-faint);margin-top:2px;}
+  .policy-actions{display:flex;gap:6px;align-items:flex-start;}
+  .policy-dates{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-top:10px;}
+  .policy-dates .col-label{display:block;margin-bottom:3px;}
+  .policy-dates .val{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);}
+  .policy-foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--line-soft);flex-wrap:wrap;gap:10px;}
+  .premium-amt{font-family:var(--mono);font-size:13px;color:var(--ink);font-weight:600;}
+  .premium-freq{font-size:11.5px;color:var(--ink-faint);}
+  .swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0;}
+
+  /* ---------- forms ---------- */
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .form-grid.single{grid-template-columns:1fr;}
+  .form-group{display:flex;flex-direction:column;gap:5px;}
+  .form-group.span2{grid-column:1 / -1;}
+  .form-group label{font-size:12px;font-weight:600;color:var(--ink-soft);}
+  .form-group .hint{font-size:11px;color:var(--ink-faint);}
+  .form-group input,.form-group select,.form-group textarea{
+    border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 11px;font-size:13.5px;color:var(--ink);background:#fff;
+  }
+  .form-group input[type="checkbox"]{border:none;padding:0;width:16px;height:16px;background:none;}
+  .form-group textarea{resize:vertical;min-height:60px;}
+  .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--green);}
+  .inline-add{display:flex;gap:8px;}
+  .inline-add select{flex:1;}
+  .modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--line-soft);}
+
+  /* ---------- modal ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(20,28,45,0.5);display:flex;align-items:center;justify-content:center;
+    padding:20px;z-index:100;animation:fadeIn .12s ease-out;
+  }
+  .modal{
+    background:#fff;border-radius:var(--r-lg);padding:24px 26px;width:100%;max-width:560px;
+    max-height:88vh;overflow-y:auto;box-shadow:0 20px 50px rgba(20,28,45,0.25);
+  }
+  .modal h2{font-family:var(--serif);font-size:19px;margin:0 0 4px;}
+  .modal .modal-sub{font-size:12.5px;color:var(--ink-faint);margin-bottom:18px;}
+  .modal.small{max-width:420px;}
+  .modal.wide{max-width:760px;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+  /* ---------- toast ---------- */
+  .toast-container{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:8px;z-index:200;}
+  .toast{
+    background:var(--ink);color:#fff;padding:11px 16px;border-radius:var(--r-sm);font-size:13px;
+    box-shadow:0 8px 20px rgba(0,0,0,0.18);animation:fadeIn .15s ease-out;display:flex;align-items:center;gap:8px;
+  }
+  .toast.danger{background:var(--red);}
+
+  /* ---------- print ---------- */
+  #printArea{display:none;}
+  @media print{
+    .app-shell{display:none !important;}
+    .modal-overlay,.toast-container{display:none !important;}
+    #printArea{display:block !important;}
+    body{background:#fff;}
+  }
+  .print-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:20px;}
+  .print-header .pmark{font-family:var(--serif);font-size:20px;font-weight:700;}
+  .print-header .pmeta{text-align:right;font-size:11.5px;color:var(--ink-soft);}
+  .print-section{margin-bottom:18px;}
+  .print-section h3{font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ink-faint);border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:8px;}
+  .print-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 18px;font-size:12.5px;}
+  table.print-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:16px;}
+  table.print-table th,table.print-table td{border:1px solid #ccc;padding:6px 8px;text-align:left;}
+  table.print-table th{background:#F0F1F4;font-size:10.5px;text-transform:uppercase;letter-spacing:0.3px;}
+
+  /* ---------- lapsing risk + policy mix ---------- */
+  .panel-alert{border-color:var(--red-soft);box-shadow:0 0 0 1px var(--red-soft) inset;}
+  .panel-alert .panel-head{background:var(--red-soft);border-radius:var(--r-lg) var(--r-lg) 0 0;}
+  .panel-alert .panel-head h2{color:var(--red);}
+  .mix-row{display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--line-soft);}
+  .mix-row:last-child{border-bottom:none;}
+  .mix-label{width:150px;flex-shrink:0;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .mix-bar-track{flex:1;background:#EEF0F4;border-radius:4px;height:10px;overflow:hidden;}
+  .mix-bar-fill{height:100%;border-radius:4px;}
+  .mix-count{width:140px;text-align:right;font-family:var(--mono);font-size:12px;color:var(--ink-soft);flex-shrink:0;}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:860px){
+    .app-shell{flex-direction:column;}
+    .sidebar{
+      position:sticky;top:0;height:auto;width:100%;flex-direction:row;align-items:center;
+      padding:12px 16px;overflow-x:auto;z-index:50;
+    }
+    .brand{border-bottom:none;margin-bottom:0;padding:0 14px 0 0;border-right:1px solid rgba(255,255,255,0.12);}
+    .nav{flex-direction:row;}
+    .sidebar-foot{display:none;}
+    .topbar,.content{padding-left:18px;padding-right:18px;}
+    .client-row,.list-head{grid-template-columns:1fr;gap:4px;}
+    .list-head{display:none;}
+    .form-grid{grid-template-columns:1fr;}
+    .dossier-fields{gap:14px;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important;transition:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<div class="app-shell" id="appShell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">Casebook</div>
+      <div class="tag">Client &amp; Policy Register</div>
+    </div>
+    <nav class="nav" id="mainNav">
+      <button class="nav-item" data-action="nav" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" data-action="nav" data-view="clients">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Clients
+      </button>
+      <button class="nav-item" data-action="nav" data-view="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 1 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </button>
+    </nav>
+    <div class="sidebar-foot">Private workspace.<br>Data stored only for you.</div>
+  </aside>
+
+  <main class="main" id="mainContent"></main>
+</div>
+
+<div id="printArea"></div>
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+window.addEventListener('error', (e) => {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;bottom:10px;right:10px;background:#AE4438;color:#fff;padding:10px 14px;border-radius:8px;font-family:monospace;font-size:12px;max-width:360px;z-index:9999;';
+  box.textContent = 'JS error: ' + e.message + ' (line ' + e.lineno + ')';
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 8000);
+});
+/* ============================== STATE ============================== */
+let clients = [];
+let categories = [];
+let settings = { advisorName: '', firmName: '', contact: '' };
+let view = { type: 'dashboard' };
+let editingClientId = null;
+let editingPolicy = null;
+let dataLoaded = false;
+
+const CAT_PALETTE = ['#2F6F5E','#3D5A80','#9C6644','#6B4E71','#4C7A4C','#8A5A44','#5B7B9A','#B8742B','#7A5C61','#4F6D7A'];
+
+const PRODUCT_CATALOG = [
+  { category:'Health Insurance', name:'Care Secure (CareShield Life Supplement)', desc:'Supplement your CareShield Life plan with enhanced long-term coverage against moderate and severe disabilities.' },
+  { category:'Health Insurance', name:'Care Secure Pro (CareShield Life Supplement)', desc:'Provides comprehensive coverage across different stages of disability, from mild to severe.' },
+  { category:'Health Insurance', name:'Enhanced IncomeShield', desc:"Unlimited lifetime coverage for medical and hospitalisation expenses from Singapore's most trusted health insurer." },
+  { category:'Health Insurance', name:'IncomeShield', desc:'Covers hospital and surgical expenses and can be paid with your MediSave account.' },
+  { category:'Health Insurance', name:'IncomeShield Standard Plan', desc:'Affordable protection for medical and hospitalisation expenses in the Class B1 ward.' },
+  { category:'Term Life Insurance', name:'Complete Cancer Care', desc:'Comprehensive support every step of the way, from diagnosis to remission.' },
+  { category:'Term Life Insurance', name:'Complete Critical Protect', desc:'Continuous protection against dread disease, from diagnosis to recovery.' },
+  { category:'Term Life Insurance', name:'Star Term Protect', desc:'Term coverage against death, terminal illness, and total and permanent disability.' },
+  { category:'Term Life Insurance', name:'TermLife Solitaire', desc:'Higher coverage at affordable premiums.' },
+  { category:'Term Life Insurance', name:'Maternity 360', desc:'Three years of comprehensive maternity insurance for mother and baby, with a single premium.' },
+  { category:'Whole Life Insurance', name:'Complete Life Secure', desc:'Complete protection across various life stages and illnesses.' },
+  { category:'Savings & ILPs', name:'Gro Cash Flex Pro', desc:'Build your wealth flexibly, the way you want.' },
+  { category:'Savings & ILPs', name:'Gro Cash Plus', desc:'An insurance savings plan to make your savings plus-sized.' },
+  { category:'Savings & ILPs', name:'InvestFlex', desc:'' },
+  { category:'Savings & ILPs', name:'InvestFlex Vantage', desc:'' },
+  { category:'Savings & ILPs', name:'InvestFlex Trivantage', desc:'' },
+];
+const CATALOG_CATEGORIES = [...new Set(PRODUCT_CATALOG.map(p => p.category))];
+const HOSPITAL_INSURANCE_PRODUCTS = ['Enhanced IncomeShield', 'IncomeShield', 'IncomeShield Standard Plan'];
+
+/* ============================== STORAGE ============================== */
+async function loadData(){
+  try{ const c = localStorage.getItem('casebook_clients'); clients = c ? JSON.parse(c) : []; }catch(e){ clients = []; }
+  try{ const cat = localStorage.getItem('casebook_categories'); categories = cat ? JSON.parse(cat) : []; }catch(e){ categories = []; }
+  try{ const s = localStorage.getItem('casebook_settings'); settings = s ? JSON.parse(s) : settings; }catch(e){ }
+  let catalogCatsChanged = false;
+  CATALOG_CATEGORIES.forEach(cat => { if(!categories.includes(cat)){ categories.push(cat); catalogCatsChanged = true; } });
+  if(catalogCatsChanged) await saveCategories();
+  dataLoaded = true;
+}
+async function saveClients(){ try{ localStorage.setItem('casebook_clients', JSON.stringify(clients)); }catch(e){ toast('Could not save — storage may be full.', 'danger'); } }
+async function saveCategories(){ try{ localStorage.setItem('casebook_categories', JSON.stringify(categories)); }catch(e){ toast('Could not save categories.', 'danger'); } }
+async function saveSettings(){ try{ localStorage.setItem('casebook_settings', JSON.stringify(settings)); }catch(e){ toast('Could not save settings.', 'danger'); } }
+
+/* ============================== UTIL ============================== */
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function esc(str){ return (str ?? '').toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function fmtDate(iso){
+  if(!iso) return '—';
+  const d = new Date(iso + 'T00:00:00');
+  if(isNaN(d)) return '—';
+  return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+}
+function daysUntil(iso){
+  if(!iso) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(iso + 'T00:00:00');
+  if(isNaN(d)) return null;
+  return Math.round((d - today) / 86400000);
+}
+function calcAge(dobIso){
+  if(!dobIso) return null;
+  const dob = new Date(dobIso + 'T00:00:00');
+  if(isNaN(dob)) return null;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const hasHadBirthdayThisYear = (today.getMonth() > dob.getMonth()) || (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
+  if(!hasHadBirthdayThisYear) age--;
+  return age;
+}
+const MONTH_NAMES = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+function monthFromName(s){ const idx = MONTH_NAMES.findIndex(m => s.toLowerCase().slice(0,3) === m); return idx === -1 ? null : idx + 1; }
+function buildIsoDate(y, mo, d){
+  y = parseInt(y,10); mo = parseInt(mo,10); d = parseInt(d,10);
+  if(!y || !mo || !d || mo<1 || mo>12 || d<1 || d>31) return null;
+  if(y < 100) y += y < 30 ? 2000 : 1900;
+  const dt = new Date(y, mo-1, d);
+  if(dt.getFullYear()!==y || dt.getMonth()!==mo-1 || dt.getDate()!==d) return null;
+  return String(y).padStart(4,'0') + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+}
+function parseFlexibleDate(input){
+  if(!input) return null;
+  let str = input.trim().replace(/(\d)(st|nd|rd|th)\b/gi, '$1');
+  if(!str) return null;
+  let m = str.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+  if(m) return buildIsoDate(m[1], m[2], m[3]);
+  m = str.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(m) return buildIsoDate(m[3], m[2], m[1]);
+  m = str.match(/^(\d{2})(\d{2})(\d{4})$/);
+  if(m) return buildIsoDate(m[3], m[2], m[1]);
+  m = str.match(/^(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})$/);
+  if(m){ const mo = monthFromName(m[2]); if(mo) return buildIsoDate(m[3], mo, m[1]); }
+  m = str.match(/^([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})$/);
+  if(m){ const mo = monthFromName(m[1]); if(mo) return buildIsoDate(m[3], mo, m[2]); }
+  return null;
+}
+function parseDateField(raw){
+  raw = (raw||'').trim();
+  if(!raw) return { iso:'', unrecognised:false };
+  const iso = parseFlexibleDate(raw);
+  return iso ? { iso, unrecognised:false } : { iso:'', unrecognised:true };
+}
+function wireFlexDateInput(inputId, hintId){
+  const input = document.getElementById(inputId);
+  const hint = document.getElementById(hintId);
+  if(!input || !hint) return;
+  input.addEventListener('input', () => {
+    const raw = input.value.trim();
+    if(!raw){ hint.textContent = ''; hint.style.color = ''; return; }
+    const iso = parseFlexibleDate(raw);
+    if(iso){ hint.textContent = 'Recognised as ' + fmtDate(iso); hint.style.color = 'var(--green)'; }
+    else { hint.textContent = 'Not recognised yet — try DD/MM/YYYY or 06 May 2026'; hint.style.color = 'var(--amber)'; }
+  });
+}
+function catColor(name){
+  if(!name) return '#7C8AA3';
+  const idx = categories.indexOf(name);
+  if(idx === -1) return '#7C8AA3';
+  return CAT_PALETTE[idx % CAT_PALETTE.length];
+}
+function findClient(id){ return clients.find(c => c.id === id); }
+function toast(msg, kind){
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind === 'danger' ? ' danger' : '');
+  el.textContent = msg;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+
+const PAYMENT_METHODS = ['GIRO','Credit Card','PayNow','Cheque','Cash','Bank Transfer','MediSave','CPF'];
+function paymentMethodList(p){
+  if(!p || !p.paymentMethod) return [];
+  const raw = Array.isArray(p.paymentMethod) ? p.paymentMethod : [p.paymentMethod];
+  return raw.filter(Boolean).map(x => typeof x === 'string' ? { method: x, amount: '' } : x);
+}
+function formatPaymentMethods(p){
+  return paymentMethodList(p).map(x =>
+    x.amount ? `${x.method} (S$ ${Number(x.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})})` : x.method
+  ).join(', ');
+}
+function premiumStatus(p){
+  if(p.premiumFrequency === 'Single Premium' || !p.premiumDueDate) return null;
+  const d = daysUntil(p.premiumDueDate);
+  if(d === null) return null;
+  if(d < 0) return { label: 'Overdue ' + Math.abs(d) + 'd', cls: 'danger' };
+  if(d <= 14) return { label: 'Due in ' + d + 'd', cls: 'warn' };
+  if(d <= 30) return { label: 'Due in ' + d + 'd', cls: 'neutral' };
+  return { label: 'Up to date', cls: 'ok' };
+}
+function expiryStatus(p){
+  if(!p.expiryDate) return null;
+  const d = daysUntil(p.expiryDate);
+  if(d === null) return null;
+  if(d < 0) return { label: 'Expired', cls: 'danger' };
+  if(d <= 30) return { label: 'Expiring in ' + d + 'd', cls: 'warn' };
+  if(d <= 60) return { label: 'Expiring in ' + d + 'd', cls: 'neutral' };
+  return { label: 'Active', cls: 'ok' };
+}
+
+/* ============================== RENDER ROOT ============================== */
+function render(){
+  document.querySelectorAll('.nav-item').forEach(b => { b.classList.toggle('active', b.dataset.view === view.type); });
+  const main = document.getElementById('mainContent');
+  if(!dataLoaded){ main.innerHTML = '<div class="content"><p style="color:var(--ink-faint);padding-top:60px;text-align:center;">Loading your workspace…</p></div>'; return; }
+  if(view.type === 'dashboard') return renderDashboard(main);
+  if(view.type === 'clients') return renderClientsList(main);
+  if(view.type === 'client-detail') return renderClientDetail(main);
+  if(view.type === 'settings') return renderSettings(main);
+}
+
+/* ============================== DASHBOARD ============================== */
+const LAPSE_RISK_DAYS = 14;
+const TOUCH_BASE_DAYS = 90;
+const ANNUAL_FACTOR = { 'Monthly':12, 'Quarterly':4, 'Semi-Annually':2, 'Annually':1 };
+
+function annualizedPremium(p){
+  if(!p.premiumAmount || p.premiumFrequency === 'Single Premium') return 0;
+  return (Number(p.premiumAmount)||0) * (ANNUAL_FACTOR[p.premiumFrequency] || 0);
+}
+function nextBirthday(dobIso){
+  if(!dobIso) return null;
+  const dob = new Date(dobIso + 'T00:00:00');
+  if(isNaN(dob)) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  let next = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+  if(next < today) next = new Date(today.getFullYear()+1, dob.getMonth(), dob.getDate());
+  const days = Math.round((next - today) / 86400000);
+  return { days, turningAge: next.getFullYear() - dob.getFullYear() };
+}
+function daysSinceContact(c){
+  const ref = c.lastContactedDate || (c.createdAt ? c.createdAt.slice(0,10) : null);
+  if(!ref) return Infinity;
+  const d = new Date(ref + 'T00:00:00');
+  if(isNaN(d)) return Infinity;
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((today - d) / 86400000);
+}
+
+function renderDashboard(main){
+  const allPolicies = [];
+  clients.forEach(c => (c.policies||[]).forEach(p => allPolicies.push({ ...p, client: c })));
+  const inForcePolicies = allPolicies.filter(p => (p.status||'In Force') === 'In Force');
+  const dueData = inForcePolicies.filter(p => p.premiumFrequency !== 'Single Premium' && p.premiumDueDate).map(p => ({ p, d: daysUntil(p.premiumDueDate) })).filter(x => x.d !== null);
+  const lapsingRisk = dueData.filter(x => x.d <= -LAPSE_RISK_DAYS).sort((a,b) => a.d - b.d);
+  const duesSoon = dueData.filter(x => x.d > -LAPSE_RISK_DAYS && x.d <= 30).sort((a,b) => a.d - b.d);
+  const premiumReviewDue = dueData.filter(x => HOSPITAL_INSURANCE_PRODUCTS.includes(x.p.name) && x.d >= 0 && x.d <= 180).sort((a,b) => a.d - b.d);
+  const expiringSoon = inForcePolicies.filter(p => p.expiryDate).map(p => ({ p, d: daysUntil(p.expiryDate) })).filter(x => x.d !== null && x.d <= 60).sort((a,b) => a.d - b.d);
+  const maturingSoon = inForcePolicies.filter(p => p.maturityDate).map(p => ({ p, d: daysUntil(p.maturityDate) })).filter(x => x.d !== null && x.d <= 90).sort((a,b) => a.d - b.d);
+  const thisWeek = [];
+  dueData.filter(x => x.d >= 0 && x.d <= 7).forEach(x => thisWeek.push({ ...x, kind:'premium' }));
+  expiringSoon.filter(x => x.d >= 0 && x.d <= 7).forEach(x => thisWeek.push({ ...x, kind:'expiry' }));
+  maturingSoon.filter(x => x.d >= 0 && x.d <= 7).forEach(x => thisWeek.push({ ...x, kind:'maturity' }));
+  const birthdaysAll = clients.map(c => ({ c, nb: nextBirthday(c.dob) })).filter(x => x.nb);
+  birthdaysAll.filter(x => x.nb.days <= 7).forEach(x => thisWeek.push({ d:x.nb.days, kind:'birthday', client:x.c, turningAge:x.nb.turningAge }));
+  thisWeek.sort((a,b) => a.d - b.d);
+  const birthdaysSoon = birthdaysAll.filter(x => x.nb.days <= 30).sort((a,b) => a.nb.days - b.nb.days);
+  const needsTouch = clients.map(c => ({ c, days: daysSinceContact(c) })).filter(x => x.days >= TOUCH_BASE_DAYS).sort((a,b) => b.days - a.days);
+  const totalAnnualized = inForcePolicies.reduce((sum,p) => sum + annualizedPremium(p), 0);
+  const totalSingle = inForcePolicies.filter(p => p.premiumFrequency === 'Single Premium').reduce((sum,p) => sum + (Number(p.premiumAmount)||0), 0);
+  const mixMap = {};
+  inForcePolicies.forEach(p => { const key = p.category || 'Uncategorised'; if(!mixMap[key]) mixMap[key] = { count:0, premium:0 }; mixMap[key].count++; mixMap[key].premium += annualizedPremium(p); });
+  const mix = Object.entries(mixMap).sort((a,b) => b[1].count - a[1].count);
+  const maxMixCount = mix.length ? mix[0][1].count : 0;
+
+  main.innerHTML = `
+    <div class="topbar">
+      <div><h1>Dashboard</h1><div class="sub">${new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}</div></div>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" data-action="export-portfolio-pdf">${icon('printer')} Portfolio summary (PDF)</button>
+        <button class="btn btn-primary" data-action="open-client-form">${icon('plus')} Add client</button>
+      </div>
+    </div>
+    <div class="content">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="num">${clients.length}</div><div class="lbl">Clients on file</div></div>
+        <div class="stat-card"><div class="num">${inForcePolicies.length} <span style="font-size:15px;color:var(--ink-faint);">/ ${allPolicies.length}</span></div><div class="lbl">Policies in force / on file</div></div>
+        <div class="stat-card ${lapsingRisk.length ? 'danger' : 'ok'}"><div class="num">${lapsingRisk.length}</div><div class="lbl">Lapsing risk (${LAPSE_RISK_DAYS}+ days overdue)</div></div>
+        <div class="stat-card ${duesSoon.length ? 'warn' : 'ok'}"><div class="num">${duesSoon.length}</div><div class="lbl">Premiums due ≤30 days</div></div>
+        <div class="stat-card ok"><div class="num">${money(totalAnnualized)}</div><div class="lbl">Annualised premium in force</div></div>
+        <div class="stat-card"><div class="num">${money(totalSingle)}</div><div class="lbl">Single-premium total</div></div>
+      </div>
+      <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>This week at a glance</h2><span class="col-label">Next 7 days</span></div><div class="panel-body">${thisWeek.length === 0 ? emptyInline('Nothing landing in the next 7 days — a quiet week.') : thisWeek.map(x => x.kind === 'birthday' ? birthdayRow(x.client, x.d, x.turningAge) : reminderRow(x.p, x.p.client, x.d, x.kind)).join('')}</div></div>
+      ${lapsingRisk.length > 0 ? `<div class="panel panel-alert" style="margin-bottom:18px;"><div class="panel-head"><h2>Lapsing risk</h2><span class="badge danger">Act now</span></div><div class="panel-body">${lapsingRisk.map(x => reminderRow(x.p, x.p.client, x.d, 'premium', true)).join('')}</div></div>` : ''}
+      <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Premiums due soon</h2><span class="col-label">Next 30 days</span></div><div class="panel-body">${duesSoon.length === 0 ? emptyInline('Nothing due in the next 30 days.') : duesSoon.slice(0,8).map(x => reminderRow(x.p, x.p.client, x.d, 'premium')).join('')}</div></div>
+      <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Hospital plan premium reviews</h2><span class="col-label">Renewing within 6 months</span></div><div class="panel-body">${premiumReviewDue.length === 0 ? emptyInline('No hospital plan renewals within 6 months.') : premiumReviewDue.map(x => premiumReviewRow(x.p, x.p.client, x.d)).join('')}</div></div>
+      <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Policies expiring</h2><span class="col-label">Next 60 days</span></div><div class="panel-body">${expiringSoon.length === 0 ? emptyInline('No expiries coming up in the next 60 days.') : expiringSoon.slice(0,8).map(x => reminderRow(x.p, x.p.client, x.d, 'expiry')).join('')}</div></div>
+      <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Maturing soon</h2><span class="col-label">Next 90 days</span></div><div class="panel-body">${maturingSoon.length === 0 ? emptyInline('No maturities coming up in the next 90 days.') : maturingSoon.slice(0,8).map(x => reminderRow(x.p, x.p.client, x.d, 'maturity')).join('')}</div></div>
+      <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Birthdays</h2><span class="col-label">Next 30 days</span></div><div class="panel-body">${birthdaysSoon.length === 0 ? emptyInline('No client birthdays in the next 30 days.') : birthdaysSoon.map(x => birthdayRow(x.c, x.nb.days, x.nb.turningAge)).join('')}</div></div>
+      <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Needs a touch base</h2><span class="col-label">No contact in ${TOUCH_BASE_DAYS}+ days</span></div><div class="panel-body">${needsTouch.length === 0 ? emptyInline('Everyone has been contacted recently — nice work.') : needsTouch.slice(0,10).map(x => touchRow(x.c, x.days)).join('')}</div></div>
+      <div class="panel"><div class="panel-head"><h2>Policy mix</h2><span class="col-label">${allPolicies.length} policies by category</span></div><div class="panel-body">${mix.length === 0 ? emptyInline("Add policies to see your book's category mix.") : mix.map(([cat, v]) => mixRow(cat, v, maxMixCount)).join('')}</div></div>
+    </div>
+  `;
+}
+function money(n){ return 'S$ ' + (Number(n)||0).toLocaleString(undefined, { minimumFractionDigits:0, maximumFractionDigits:0 }); }
+function reminderRow(p, client, d, kind, showPaidAction){
+  const color = catColor(p.category);
+  const dateField = kind === 'premium' ? p.premiumDueDate : kind === 'expiry' ? p.expiryDate : p.maturityDate;
+  const dLabel = d < 0 ? Math.abs(d)+'d overdue' : d===0 ? 'Today' : 'in '+d+'d';
+  const typeTag = kind === 'expiry' ? 'Expiry' : kind === 'maturity' ? 'Maturity' : 'Premium';
+  return `<div class="reminder-row"><div class="reminder-main"><span class="reminder-dot" style="background:${color}"></span><div class="reminder-text"><div class="name">${esc(p.name)} <span style="color:var(--ink-faint);font-weight:400;">— ${esc(client.name)}</span></div><div class="meta">${typeTag} · ${esc(p.category || 'Uncategorised')} · ${esc(p.insurer || '')}</div></div></div><div class="reminder-meta"><div class="date">${fmtDate(dateField)}</div><div style="margin-top:3px;"><span class="badge ${d<0?'danger':d<=14?'warn':'neutral'}">${dLabel}</span></div>${showPaidAction ? `<button class="btn btn-ghost btn-sm" style="margin-top:6px;" data-action="mark-paid" data-client="${client.id}" data-policy="${p.id}">${icon('check')} Mark paid</button>` : ''}</div></div>`;
+}
+function premiumReviewRow(p, client, d){
+  const color = catColor(p.category);
+  const monthsAway = Math.round(d/30);
+  return `<div class="reminder-row"><div class="reminder-main"><span class="reminder-dot" style="background:${color}"></span><div class="reminder-text"><div class="name">${esc(p.name)} <span style="color:var(--ink-faint);font-weight:400;">— ${esc(client.name)}</span></div><div class="meta">Renews annually — confirm next year's premium with the insurer</div></div></div><div class="reminder-meta"><div class="date">${fmtDate(p.premiumDueDate)}</div><div style="margin-top:3px;"><span class="badge neutral">${d===0?'Today':monthsAway>=1?'~'+monthsAway+'mo away':'in '+d+'d'}</span></div><div style="margin-top:3px;"><button class="btn btn-ghost btn-sm" data-action="log-contact" data-id="${client.id}">${icon('check')} Log contact</button></div></div></div>`;
+}
+function birthdayRow(c, days, turningAge){
+  const dLabel = days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : 'in ' + days + 'd';
+  return `<div class="reminder-row"><div class="reminder-main"><span class="reminder-dot" style="background:var(--amber)"></span><div class="reminder-text"><div class="name">${esc(c.name)}</div><div class="meta">Birthday · turning ${turningAge}</div></div></div><div class="reminder-meta"><div class="date">${dLabel}</div><div style="margin-top:3px;"><button class="btn btn-ghost btn-sm" data-action="log-contact" data-id="${c.id}">${icon('check')} Log contact</button></div></div></div>`;
+}
+function touchRow(c, days){
+  const label = days === Infinity ? 'Never logged' : days + 'd since last contact';
+  return `<div class="reminder-row"><div class="reminder-main"><span class="reminder-dot" style="background:var(--ink-faint)"></span><div class="reminder-text"><div class="name" data-action="view-client" data-id="${c.id}" style="cursor:pointer;">${esc(c.name)}</div><div class="meta">${(c.policies||[]).length} polic${(c.policies||[]).length===1?'y':'ies'} on file</div></div></div><div class="reminder-meta"><div class="date">${label}</div><div style="margin-top:3px;"><button class="btn btn-ghost btn-sm" data-action="log-contact" data-id="${c.id}">${icon('check')} Log contact</button></div></div></div>`;
+}
+function mixRow(cat, v, maxCount){
+  const pct = maxCount ? Math.round((v.count / maxCount) * 100) : 0;
+  const color = catColor(cat);
+  return `<div class="mix-row"><div class="mix-label"><span class="swatch" style="background:${color}"></span>${esc(cat)}</div><div class="mix-bar-track"><div class="mix-bar-fill" style="width:${pct}%;background:${color}"></div></div><div class="mix-count">${v.count} · ${money(v.premium)}/yr</div></div>`;
+}
+function emptyInline(msg){ return `<p style="color:var(--ink-faint);font-size:13.5px;padding:10px 0;">${msg}</p>`; }
+
+/* ============================== CLIENTS LIST ============================== */
+function renderClientsList(main){
+  const q = (view.search || '').toLowerCase();
+  const catFilter = view.catFilter || '';
+  let list = clients.filter(c => {
+    const matchesQ = !q || c.name.toLowerCase().includes(q);
+    const matchesCat = !catFilter || (c.policies||[]).some(p => p.category === catFilter);
+    return matchesQ && matchesCat;
+  }).sort((a,b) => a.name.localeCompare(b.name));
+  main.innerHTML = `
+    <div class="topbar"><div><h1>Clients</h1><div class="sub">${clients.length} on file</div></div><div class="topbar-actions"><button class="btn btn-primary" data-action="open-client-form">${icon('plus')} Add client</button></div></div>
+    <div class="content">
+      <div class="toolbar">
+        <div class="search-box">${icon('search')}<input id="clientSearch" placeholder="Search by name…" value="${esc(view.search||'')}"></div>
+        <select class="filter-select" id="catFilterSelect"><option value="">All categories</option>${categories.map(c => `<option value="${esc(c)}" ${c===catFilter?'selected':''}>${esc(c)}</option>`).join('')}</select>
+      </div>
+      <div class="panel"><div class="panel-body">${clients.length === 0 ? emptyState('people') : list.length === 0 ? emptyInline('No clients match your search.') : `<div class="list-head"><span class="col-label">Client</span><span class="col-label">DOB</span><span class="col-label">Next due</span><span></span></div><div class="client-list">${list.map(c => clientRow(c)).join('')}</div>`}</div></div>
+    </div>
+  `;
+  document.getElementById('clientSearch')?.addEventListener('input', e => { view.search = e.target.value; renderClientsList(main); preserveFocus('clientSearch'); });
+  document.getElementById('catFilterSelect')?.addEventListener('change', e => { view.catFilter = e.target.value; renderClientsList(main); });
+}
+function preserveFocus(id){ const el = document.getElementById(id); if(el){ el.focus(); el.selectionStart = el.selectionEnd = el.value.length; } }
+function clientRow(c){
+  const policies = c.policies || [];
+  const inForceCount = policies.filter(p => (p.status||'In Force') === 'In Force').length;
+  const next = policies.filter(p => p.premiumFrequency !== 'Single Premium' && p.premiumDueDate).map(p => ({ p, d: daysUntil(p.premiumDueDate) })).sort((a,b) => a.d - b.d)[0];
+  const age = calcAge(c.dob);
+  return `<div class="client-row" data-action="view-client" data-id="${c.id}"><div><div class="client-name">${esc(c.name)}</div><div class="client-sub">${inForceCount} of ${policies.length} polic${policies.length===1?'y':'ies'} in force</div></div><div class="mono-id">${fmtDate(c.dob)}${age!==null ? ' ('+age+')' : ''}</div><div>${next ? `<span class="badge ${next.d<0?'danger':next.d<=14?'warn':'neutral'}">${fmtDate(next.p.premiumDueDate)}</span>` : `<span class="badge ok">None due</span>`}</div><div style="text-align:right;color:var(--ink-faint);width:16px;height:16px;margin-left:auto;">${icon('chevron')}</div></div>`;
+}
+function emptyState(kind){ return `<div class="empty-state">${icon('inbox')}<h3>No clients yet</h3><p>Add your first client to start building their policy file.</p><button class="btn btn-primary" data-action="open-client-form">${icon('plus')} Add client</button></div>`; }
+
+/* ============================== CLIENT DETAIL ============================== */
+function renderClientDetail(main){
+  const c = findClient(view.clientId);
+  if(!c){ view = { type:'clients' }; return renderClientsList(main); }
+  const policies = (c.policies||[]).slice().sort((a,b) => { const da = a.premiumDueDate || a.expiryDate || '9999'; const db = b.premiumDueDate || b.expiryDate || '9999'; return da.localeCompare(db); });
+  const age = calcAge(c.dob);
+  const inForceCount = policies.filter(p => (p.status||'In Force') === 'In Force').length;
+  main.innerHTML = `
+    <div class="topbar"><div><button class="btn btn-ghost btn-sm" data-action="nav" data-view="clients">${icon('back')} All clients</button></div><div class="topbar-actions"><button class="btn btn-ghost" data-action="export-client-pdf" data-id="${c.id}">${icon('printer')} Export PDF</button><button class="btn btn-accent" data-action="open-policy-form" data-client="${c.id}">${icon('plus')} Add policy</button></div></div>
+    <div class="content">
+      <div class="dossier-head">
+        <div class="dossier-id-block">
+          <div class="name">${esc(c.name)}</div>
+          <div class="dossier-fields">
+            <div class="dossier-field"><span class="col-label">Date of birth</span><span class="val">${fmtDate(c.dob)}${age!==null ? ' · Age '+age : ''}</span></div>
+            <div class="dossier-field"><span class="col-label">Phone</span><span class="val">${esc(c.phone||'—')}</span></div>
+            <div class="dossier-field"><span class="col-label">Email</span><span class="val">${esc(c.email||'—')}</span></div>
+            <div class="dossier-field"><span class="col-label">Last contact</span><span class="val">${c.lastContactedDate ? fmtDate(c.lastContactedDate) : 'Not logged yet'}</span></div>
+          </div>
+          <div class="dossier-fields"><div class="dossier-field" style="max-width:480px;"><span class="col-label">Address</span><span class="val">${esc(c.address||'—')}</span></div></div>
+          ${c.notes ? `<div class="dossier-fields"><div class="dossier-field" style="max-width:480px;"><span class="col-label">Notes</span><span class="val">${esc(c.notes)}</span></div></div>` : ''}
+        </div>
+        <div class="dossier-actions">
+          <button class="btn btn-ghost btn-sm" data-action="log-contact" data-id="${c.id}">${icon('check')} Log contact today</button>
+          <button class="icon-btn" data-action="open-client-form" data-id="${c.id}" title="Edit client">${icon('edit')}</button>
+          <button class="icon-btn" data-action="delete-client" data-id="${c.id}" title="Delete client">${icon('trash')}</button>
+        </div>
+      </div>
+      <div class="section-title"><h2>Policies</h2><span class="col-label">${inForceCount} of ${policies.length} in force</span></div>
+      ${policies.length === 0 ? `<div class="panel"><div class="empty-state">${icon('file')}<h3>No policies yet</h3><p>Add this client's first policy to start tracking dates and premiums.</p><button class="btn btn-accent" data-action="open-policy-form" data-client="${c.id}">${icon('plus')} Add policy</button></div></div>` : policies.map(p => policyCard(c, p)).join('')}
+    </div>
+  `;
+}
+function policyCard(c, p){
+  const ps = premiumStatus(p);
+  const es = expiryStatus(p);
+  const status = p.status || 'In Force';
+  const statusCls = status === 'In Force' ? 'ok' : status === 'Lapsed' ? 'danger' : 'neutral';
+  return `<div class="policy-card" style="border-left-color:${catColor(p.category)}"><div class="policy-top"><div><div class="policy-title">${esc(p.name)}</div><div class="policy-insurer">${esc(p.insurer||'—')} ${p.policyNumber ? '· '+esc(p.policyNumber) : ''}</div></div><div class="policy-actions"><span class="badge ${statusCls}">${esc(status)}</span><span class="badge neutral" style="background:${catColor(p.category)}22;color:${catColor(p.category)};">${esc(p.category||'Uncategorised')}</span><button class="icon-btn" data-action="open-policy-form" data-client="${c.id}" data-policy="${p.id}" title="Edit">${icon('edit')}</button><button class="icon-btn" data-action="delete-policy" data-client="${c.id}" data-policy="${p.id}" title="Delete">${icon('trash')}</button></div></div><div class="policy-dates"><div><span class="col-label">Inception</span><span class="val">${fmtDate(p.inceptionDate)}</span></div><div><span class="col-label">Expiry</span><span class="val">${fmtDate(p.expiryDate)} ${es?`<span class="badge ${es.cls}" style="margin-left:6px;">${es.label}</span>`:''}</span></div><div><span class="col-label">Maturity</span><span class="val">${HOSPITAL_INSURANCE_PRODUCTS.includes(p.name) ? 'N/A — renews annually' : fmtDate(p.maturityDate)}</span></div><div><span class="col-label">Premium due</span><span class="val">${p.premiumFrequency==='Single Premium' ? 'N/A' : fmtDate(p.premiumDueDate)} ${ps?`<span class="badge ${ps.cls}" style="margin-left:6px;">${ps.label}</span>`:''}</span></div></div><div class="policy-foot"><div><span class="premium-amt">${p.premiumAmount ? 'S$ '+Number(p.premiumAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</span><span class="premium-freq"> / ${esc(p.premiumFrequency||'—')}</span>${paymentMethodList(p).length ? `<span class="premium-freq"> · via ${esc(formatPaymentMethods(p))}</span>` : ''}${p.lastPaidDate ? `<span class="premium-freq"> · last paid ${fmtDate(p.lastPaidDate)}</span>` : ''}</div><div style="display:flex;gap:8px;">${p.premiumFrequency!=='Single Premium' && p.premiumDueDate ? `<button class="btn btn-ghost btn-sm" data-action="mark-paid" data-client="${c.id}" data-policy="${p.id}">${icon('check')} Mark premium paid</button>` : ''}</div></div></div>`;
+}
+
+/* ============================== SETTINGS ============================== */
+function renderSettings(main){
+  main.innerHTML = `
+    <div class="topbar"><div><h1>Settings</h1><div class="sub">Used as the letterhead on exported PDF summaries.</div></div></div>
+    <div class="content">
+      <div class="panel" style="max-width:480px;margin-bottom:18px;"><div class="panel-body"><div class="form-grid single"><div class="form-group"><label>Your name</label><input id="setAdvisor" value="${esc(settings.advisorName)}" placeholder="e.g. Tan Wei Ming"></div><div class="form-group"><label>Firm / agency</label><input id="setFirm" value="${esc(settings.firmName)}" placeholder="e.g. Horizon Financial Advisory"></div><div class="form-group"><label>Contact (phone or email)</label><input id="setContact" value="${esc(settings.contact)}" placeholder="e.g. 9123 4567"></div></div><div class="modal-foot" style="border-top:none;justify-content:flex-start;padding-top:14px;"><button class="btn btn-primary" data-action="save-settings">Save settings</button></div></div></div>
+      <div class="panel" style="max-width:480px;margin-bottom:18px;"><div class="panel-head"><h2>Backup &amp; restore</h2></div><div class="panel-body"><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="btn btn-ghost" data-action="export-backup">${icon('printer')} Download backup</button><button class="btn btn-ghost" data-action="import-backup">${icon('plus')} Restore from file</button></div><input type="file" id="backupImportInput" accept=".json" style="display:none;"><p style="font-size:12px;color:var(--ink-faint);margin-top:10px;">Download saves all clients and policies as a JSON file. Restore replaces all current data with the file's contents.</p></div></div>
+    </div>
+  `;
+  document.getElementById('backupImportInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if(!file) return;
+    try{
+      const text = await file.text(); const bundle = JSON.parse(text);
+      if(!Array.isArray(bundle.clients)) throw new Error('Invalid backup file — missing clients array.');
+      const ok = await confirmModal('Restore from backup?', 'This will replace all your current data with the backup file. This cannot be undone.');
+      if(!ok){ e.target.value = ''; return; }
+      clients = bundle.clients || []; categories = bundle.categories || [];
+      if(bundle.settings) Object.assign(settings, bundle.settings);
+      await saveClients(); await saveCategories(); await saveSettings();
+      toast('Data restored — ' + clients.length + ' client(s) loaded.');
+      view = { type: 'dashboard' }; render();
+    }catch(err){ toast('Could not read that file: ' + (err.message || err), 'danger'); }
+    e.target.value = '';
+  });
+}
+function exportBackup(){
+  const bundle = { clients, categories, settings };
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = 'casebook-backup.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+async function saveSettingsForm(){
+  settings.advisorName = document.getElementById('setAdvisor').value.trim();
+  settings.firmName = document.getElementById('setFirm').value.trim();
+  settings.contact = document.getElementById('setContact').value.trim();
+  await saveSettings(); toast('Settings saved.');
+}
+
+/* ============================== MODALS: CLIENT FORM ============================== */
+function openClientForm(id){
+  editingClientId = id || null;
+  const c = id ? findClient(id) : null;
+  showModal(`
+    <h2>${c ? 'Edit client' : 'Add client'}</h2>
+    <div class="modal-sub">Core identification details for this client's file.</div>
+    <form id="clientForm" novalidate>
+      <div class="form-grid">
+        <div class="form-group span2"><label>Full name *</label><input name="name" id="clientNameInput" value="${esc(c?.name||'')}"></div>
+        <div class="form-group"><label>Date of birth</label><input type="text" name="dob" id="dobInput" value="${c?.dob ? fmtDate(c.dob) : ''}" placeholder="e.g. 14 Mar 1985, 14/03/1985, 1985-03-14"><span class="hint" id="ageHint">${calcAge(c?.dob) !== null ? 'Age '+calcAge(c?.dob) : 'Type the date in any common format'}</span></div>
+        <div class="form-group"><label>Phone</label><input name="phone" value="${esc(c?.phone||'')}"></div>
+        <div class="form-group"><label>Email</label><input type="text" name="email" value="${esc(c?.email||'')}"></div>
+        <div class="form-group span2"><label>Address</label><textarea name="address">${esc(c?.address||'')}</textarea></div>
+        <div class="form-group span2"><label>Notes</label><textarea name="notes" placeholder="Optional — anything worth remembering">${esc(c?.notes||'')}</textarea></div>
+      </div>
+      <div class="modal-foot"><button type="button" class="btn btn-ghost" data-action="close-modal">Cancel</button><button type="button" id="clientFormSaveBtn" class="btn btn-primary">${c?'Save changes':'Add client'}</button></div>
+    </form>
+  `);
+  document.getElementById('dobInput').addEventListener('input', (e) => {
+    const hint = document.getElementById('ageHint'); const raw = e.target.value.trim();
+    if(!raw){ hint.textContent = 'Type the date in any common format'; hint.style.color = ''; return; }
+    const iso = parseFlexibleDate(raw);
+    if(iso){ const age = calcAge(iso); hint.textContent = 'Recognised as ' + fmtDate(iso) + (age!==null ? ' · Age '+age : ''); hint.style.color = 'var(--green)'; }
+    else { hint.textContent = "Not recognised yet — try DD/MM/YYYY or 14 Mar 1985"; hint.style.color = 'var(--amber)'; }
+  });
+  document.getElementById('clientFormSaveBtn').addEventListener('click', submitClientForm);
+}
+async function submitClientForm(){
+  try{
+    const f = new FormData(document.getElementById('clientForm'));
+    const rawDob = (f.get('dob')||'').trim(); let dobIso = ''; let dobUnrecognised = false;
+    if(rawDob){ dobIso = parseFlexibleDate(rawDob); if(!dobIso) dobUnrecognised = true; }
+    const data = { name: (f.get('name')||'').trim(), dob: dobIso, phone: (f.get('phone')||'').trim(), email: (f.get('email')||'').trim(), address: (f.get('address')||'').trim(), notes: (f.get('notes')||'').trim() };
+    if(!data.name){ toast('Please fill in the required field: Full name.', 'danger'); const nameInput = document.getElementById('clientNameInput'); if(nameInput){ nameInput.style.borderColor = 'var(--red)'; nameInput.focus(); nameInput.addEventListener('input', () => { nameInput.style.borderColor = ''; }, { once: true }); } return; }
+    let newClientId = null;
+    if(editingClientId){ const c = findClient(editingClientId); Object.assign(c, data); }
+    else { newClientId = uid(); clients.push({ id: newClientId, ...data, policies: [], lastContactedDate: '', createdAt: new Date().toISOString() }); }
+    await saveClients(); closeModal();
+    if(dobUnrecognised){ toast("Saved, but date of birth wasn't recognised and was left blank — edit the client to fix it.", 'danger'); }
+    else { toast(editingClientId ? 'Client updated.' : 'Client added — now add their first policy.'); }
+    if(newClientId){ view = { type: 'client-detail', clientId: newClientId }; render(); openPolicyForm(newClientId); }
+    else if(view.type==='client-detail'){ renderClientDetail(document.getElementById('mainContent')); }
+    else { render(); }
+  }catch(err){ toast('Something went wrong saving this client: ' + (err && err.message ? err.message : err), 'danger'); }
+}
+async function deleteClient(id){
+  const c = findClient(id); if(!c) return;
+  const ok = await confirmModal('Delete ' + c.name + '?', 'This removes the client and all their policies permanently.');
+  if(!ok) return;
+  clients = clients.filter(x => x.id !== id); await saveClients(); toast('Client deleted.'); view = { type: 'clients' }; render();
+}
+
+/* ============================== MODALS: POLICY FORM ============================== */
+function openPolicyForm(clientId, policyId){
+  editingPolicy = { clientId, policyId: policyId || null };
+  const c = findClient(clientId); const p = policyId ? (c.policies||[]).find(x=>x.id===policyId) : null;
+  showModal(`
+    <h2>${p ? 'Edit policy' : 'Add policy'}</h2>
+    <div class="modal-sub">For ${esc(c.name)}</div>
+    <form id="policyForm" novalidate>
+      <div class="form-grid">
+        <div class="form-group span2"><label>Product</label><select id="productPicker"><option value="">Choose a product, or pick "Other" to type your own…</option>${CATALOG_CATEGORIES.map(cat => `<optgroup label="${esc(cat)}">${PRODUCT_CATALOG.filter(pr => pr.category === cat).map(pr => `<option value="${esc(cat)}|||${esc(pr.name)}">${esc(pr.name)}</option>`).join('')}</optgroup>`).join('')}<option value="__custom__">Other / not listed — type my own</option></select><span class="hint" id="productDesc"></span></div>
+        <div class="form-group span2"><label>Policy / product name *</label><input name="name" id="policyNameInput" value="${esc(p?.name||'')}" placeholder="e.g. WholeLife Protect 2.0"></div>
+        <div class="form-group"><label>Category</label><div class="inline-add"><select name="category" id="policyCategorySelect"><option value="">Uncategorised</option>${categories.map(cat => `<option value="${esc(cat)}" ${p?.category===cat?'selected':''}>${esc(cat)}</option>`).join('')}</select></div><span class="hint">Picking a product above fills this in automatically.</span></div>
+        <div class="form-group"><label>Or add new category</label><input name="newCategory" placeholder="Type to create"></div>
+        <div class="form-group"><label>Insurer / provider</label><select name="insurer">${['Income Insurance','FWD','HSBC Life','Singlife'].map(o=>`<option ${p?.insurer===o?'selected':''}>${o}</option>`).join('')}<option value="Other" ${p?.insurer && !['Income Insurance','FWD','HSBC Life','Singlife'].includes(p.insurer) ? 'selected':''}>Other</option></select></div>
+        <div class="form-group"><label>Or type another insurer</label><input name="insurerOther" placeholder="If not listed above" value="${p?.insurer && !['Income Insurance','FWD','HSBC Life','Singlife'].includes(p.insurer) ? esc(p.insurer) : ''}"></div>
+        <div class="form-group"><label>Policy number</label><input name="policyNumber" value="${esc(p?.policyNumber||'')}"></div>
+        <div class="form-group"><label>Status</label><select name="status">${['In Force','Lapsed','Surrendered','Matured','Withdrawn'].map(o=>`<option ${ (p?.status||'In Force')===o ? 'selected':''}>${o}</option>`).join('')}</select></div>
+        <div class="form-group"><label>Inception / start date</label><input type="text" name="inceptionDate" id="inceptionDateInput" value="${p?.inceptionDate ? fmtDate(p.inceptionDate) : ''}" placeholder="e.g. 06 May 2026"><span class="hint" id="inceptionDateInputHint"></span></div>
+        <div class="form-group"><label>Expiry date</label><input type="text" name="expiryDate" id="expiryDateInput" value="${p?.expiryDate ? fmtDate(p.expiryDate) : ''}" placeholder="e.g. 06 May 2026"><span class="hint" id="expiryDateInputHint"></span></div>
+        <div class="form-group" id="maturityDateWrap"><label>Maturity date</label><input type="text" name="maturityDate" id="maturityDateInput" value="${p?.maturityDate ? fmtDate(p.maturityDate) : ''}" placeholder="e.g. 06 May 2026"><span class="hint" id="maturityDateInputHint"></span></div>
+        <div class="form-group" id="maturityDateNote" style="display:none;"><label>Maturity date</label><span class="hint">Not applicable — hospital insurance renews annually with no fixed maturity.</span></div>
+        <div class="form-group span2"><label>Payment method <span class="hint">(select all that apply)</span></label>
+          <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px;">
+            ${PAYMENT_METHODS.map(o => { const existing = paymentMethodList(p).find(x => x.method === o); const checked = !!existing; return `<div style="display:flex;align-items:center;gap:10px;"><label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink-soft);cursor:pointer;width:140px;flex-shrink:0;"><input type="checkbox" name="paymentMethod" value="${o}" data-pm-checkbox="${esc(o)}" ${checked?'checked':''}>${o}</label><input type="number" step="0.01" name="pmAmount__${esc(o)}" data-pm-amount="${esc(o)}" placeholder="Amount (S$)" value="${existing&&existing.amount?existing.amount:''}" style="max-width:140px;${checked?'':'display:none;}"></div>`; }).join('')}
+          </div>
+        </div>
+        <div class="form-group"><label>Premium frequency</label><select name="premiumFrequency" id="premFreq">${['Monthly','Quarterly','Semi-Annually','Annually','Single Premium'].map(o=>`<option ${p?.premiumFrequency===o?'selected':''}>${o}</option>`).join('')}</select></div>
+        <div class="form-group" id="premDueWrap"><label>Premium due date</label><input type="text" name="premiumDueDate" id="premiumDueDateInput" value="${p?.premiumDueDate ? fmtDate(p.premiumDueDate) : ''}" placeholder="e.g. 06 May 2026"><span class="hint" id="premiumDueDateInputHint"></span></div>
+        <div class="form-group"><label>Premium amount (S$)</label><input type="number" step="0.01" name="premiumAmount" id="premiumAmountInput" value="${p?.premiumAmount||''}"><span class="hint" id="premiumAmountHint">Auto-totals from payment methods, if entered</span></div>
+        <div class="form-group"><label>Sum assured (S$)</label><input type="number" step="0.01" name="sumAssured" value="${p?.sumAssured||''}"></div>
+        <div class="form-group span2"><label>Notes</label><textarea name="notes">${esc(p?.notes||'')}</textarea></div>
+      </div>
+      <div class="modal-foot"><button type="button" class="btn btn-ghost" data-action="close-modal">Cancel</button><button type="button" id="policyFormSaveBtn" class="btn btn-accent">${p?'Save changes':'Add policy'}</button></div>
+    </form>
+  `);
+  const nameInput = document.querySelector('#policyForm [name="name"]');
+  const categorySelect = document.getElementById('policyCategorySelect');
+  const insurerSelect = document.querySelector('#policyForm [name="insurer"]');
+  const productPicker = document.getElementById('productPicker');
+  const productDesc = document.getElementById('productDesc');
+  const toggleMaturity = () => { const isHospitalPlan = HOSPITAL_INSURANCE_PRODUCTS.includes(nameInput.value.trim()); document.getElementById('maturityDateWrap').style.display = isHospitalPlan ? 'none' : ''; document.getElementById('maturityDateNote').style.display = isHospitalPlan ? '' : 'none'; if(isHospitalPlan){ document.getElementById('maturityDateInput').value = ''; document.getElementById('maturityDateInputHint').textContent = ''; } };
+  nameInput.addEventListener('input', toggleMaturity); toggleMaturity();
+  productPicker.addEventListener('change', () => {
+    const val = productPicker.value;
+    if(val === '__custom__'){ productDesc.textContent = 'Type the product name and pick a category below.'; nameInput.focus(); }
+    else if(val === ''){ productDesc.textContent = ''; }
+    else { const [cat, prodName] = val.split('|||'); const entry = PRODUCT_CATALOG.find(pr => pr.category === cat && pr.name === prodName); nameInput.value = prodName; if([...categorySelect.options].some(o => o.value === cat)) categorySelect.value = cat; insurerSelect.value = 'Income Insurance'; productDesc.textContent = entry?.desc || ''; toggleMaturity(); }
+  });
+  if(p){ const match = PRODUCT_CATALOG.find(pr => pr.name === p.name); if(match){ productPicker.value = match.category + '|||' + match.name; productDesc.textContent = match.desc || ''; } }
+  const freqSel = document.getElementById('premFreq');
+  const toggleDue = () => { document.getElementById('premDueWrap').style.display = freqSel.value==='Single Premium' ? 'none' : 'flex'; };
+  freqSel.addEventListener('change', toggleDue); toggleDue();
+  wireFlexDateInput('inceptionDateInput', 'inceptionDateInputHint');
+  wireFlexDateInput('expiryDateInput', 'expiryDateInputHint');
+  wireFlexDateInput('maturityDateInput', 'maturityDateInputHint');
+  wireFlexDateInput('premiumDueDateInput', 'premiumDueDateInputHint');
+  const premiumAmountInput = document.getElementById('premiumAmountInput');
+  const recalcTotal = () => {
+    let sum = 0; let any = false;
+    PAYMENT_METHODS.forEach(o => { const amtField = document.querySelector(`[data-pm-amount="${o}"]`); const cbField = document.querySelector(`[data-pm-checkbox="${o}"]`); if(cbField && cbField.checked && amtField && amtField.value !== ''){ sum += Number(amtField.value) || 0; any = true; } });
+    if(any){ premiumAmountInput.value = sum.toFixed(2); document.getElementById('premiumAmountHint').textContent = 'Auto-totalled from payment methods'; }
+    else { document.getElementById('premiumAmountHint').textContent = 'Auto-totals from payment methods, if entered'; }
+  };
+  PAYMENT_METHODS.forEach(o => {
+    const cb = document.querySelector(`[data-pm-checkbox="${o}"]`); const amt = document.querySelector(`[data-pm-amount="${o}"]`); if(!cb || !amt) return;
+    cb.addEventListener('change', () => { amt.style.display = cb.checked ? '' : 'none'; if(!cb.checked) amt.value = ''; recalcTotal(); });
+    amt.addEventListener('input', recalcTotal);
+  });
+  document.getElementById('policyFormSaveBtn').addEventListener('click', submitPolicyForm);
+}
+async function submitPolicyForm(){
+  try{
+    const f = new FormData(document.getElementById('policyForm'));
+    const { clientId, policyId } = editingPolicy; const c = findClient(clientId);
+    let category = (f.get('category')||'').trim(); const newCategory = (f.get('newCategory')||'').trim();
+    if(newCategory){ category = newCategory; if(!categories.includes(newCategory)){ categories.push(newCategory); await saveCategories(); } }
+    let insurer = f.get('insurer')||''; const insurerOther = (f.get('insurerOther')||'').trim(); if(insurerOther) insurer = insurerOther;
+    const inception = parseDateField(f.get('inceptionDate')); const expiry = parseDateField(f.get('expiryDate'));
+    const policyNameRaw = (f.get('name')||'').trim(); const isHospitalPlan = HOSPITAL_INSURANCE_PRODUCTS.includes(policyNameRaw);
+    const maturity = isHospitalPlan ? { iso:'', unrecognised:false } : parseDateField(f.get('maturityDate'));
+    const isSingle = f.get('premiumFrequency')==='Single Premium'; const premDue = isSingle ? { iso:'', unrecognised:false } : parseDateField(f.get('premiumDueDate'));
+    const unrecognisedDates = [];
+    if(inception.unrecognised) unrecognisedDates.push('Inception date'); if(expiry.unrecognised) unrecognisedDates.push('Expiry date'); if(maturity.unrecognised) unrecognisedDates.push('Maturity date'); if(premDue.unrecognised) unrecognisedDates.push('Premium due date');
+    const selectedPaymentMethods = f.getAll('paymentMethod').map(m => ({ method: m, amount: f.get('pmAmount__' + m) || '' }));
+    const data = { name: (f.get('name')||'').trim(), category, insurer, policyNumber: (f.get('policyNumber')||'').trim(), status: f.get('status')||'In Force', inceptionDate: inception.iso, expiryDate: expiry.iso, maturityDate: maturity.iso, paymentMethod: selectedPaymentMethods, premiumFrequency: f.get('premiumFrequency')||'Monthly', premiumDueDate: premDue.iso, premiumAmount: f.get('premiumAmount')||'', sumAssured: f.get('sumAssured')||'', notes: (f.get('notes')||'').trim() };
+    if(!data.name){ toast('Please fill in the required field: Policy / product name.', 'danger'); const nameInput = document.getElementById('policyNameInput'); if(nameInput){ nameInput.style.borderColor = 'var(--red)'; nameInput.focus(); nameInput.addEventListener('input', () => { nameInput.style.borderColor = ''; }, { once: true }); } return; }
+    c.policies = c.policies || [];
+    if(policyId){ const p = c.policies.find(x=>x.id===policyId); Object.assign(p, data); }
+    else { c.policies.push({ id: uid(), ...data, lastPaidDate: '' }); }
+    await saveClients(); closeModal();
+    if(unrecognisedDates.length){ toast("Saved, but these dates weren't recognised and were left blank: " + unrecognisedDates.join(', ') + '.', 'danger'); }
+    else { toast(policyId ? 'Policy updated.' : 'Policy added.'); }
+    renderClientDetail(document.getElementById('mainContent'));
+  }catch(err){ toast('Something went wrong saving this policy: ' + (err && err.message ? err.message : err), 'danger'); }
+}
+async function deletePolicy(clientId, policyId){
+  const c = findClient(clientId); const p = (c.policies||[]).find(x=>x.id===policyId); if(!p) return;
+  const ok = await confirmModal('Delete "' + p.name + '"?', "This removes the policy from this client's file permanently."); if(!ok) return;
+  c.policies = c.policies.filter(x => x.id !== policyId); await saveClients(); toast('Policy deleted.'); renderClientDetail(document.getElementById('mainContent'));
+}
+async function markPaid(clientId, policyId){
+  const c = findClient(clientId); const p = (c.policies||[]).find(x=>x.id===policyId); if(!p || !p.premiumDueDate) return;
+  const d = new Date(p.premiumDueDate + 'T00:00:00'); const map = { 'Monthly':1, 'Quarterly':3, 'Semi-Annually':6, 'Annually':12 }; const months = map[p.premiumFrequency] || 1;
+  d.setMonth(d.getMonth() + months); p.lastPaidDate = new Date().toISOString().slice(0,10); p.premiumDueDate = d.toISOString().slice(0,10);
+  await saveClients(); toast('Marked paid — next due ' + fmtDate(p.premiumDueDate)); render();
+}
+async function markContact(clientId){
+  const c = findClient(clientId); if(!c) return;
+  c.lastContactedDate = new Date().toISOString().slice(0,10); await saveClients(); toast('Logged contact with ' + c.name + '.'); render();
+}
+
+/* ============================== MODAL / CONFIRM HELPERS ============================== */
+function showModal(innerHtml, opts){
+  closeModal(); const overlay = document.createElement('div'); overlay.className = 'modal-overlay'; overlay.id = 'activeModalOverlay';
+  overlay.innerHTML = `<div class="modal ${opts?.small?'small':''} ${opts?.wide?'wide':''}">${innerHtml}</div>`;
+  overlay.addEventListener('click', e => { if(e.target === overlay) closeModal(); }); document.body.appendChild(overlay);
+}
+function closeModal(){ document.getElementById('activeModalOverlay')?.remove(); }
+function confirmModal(title, body){
+  return new Promise(resolve => {
+    showModal(`<h2>${esc(title)}</h2><div class="modal-sub">${esc(body)}</div><div class="modal-foot"><button class="btn btn-ghost" id="cmCancel">Cancel</button><button class="btn btn-danger" id="cmOk">Delete</button></div>`, { small: true });
+    document.getElementById('cmCancel').onclick = () => { closeModal(); resolve(false); };
+    document.getElementById('cmOk').onclick = () => { closeModal(); resolve(true); };
+  });
+}
+
+/* ============================== PDF EXPORT (print) ============================== */
+function letterhead(){ return `<div class="print-header"><div><div class="pmark">Casebook</div><div style="font-size:11px;color:var(--ink-faint);">Client &amp; Policy Register</div></div><div class="pmeta">${settings.advisorName ? esc(settings.advisorName)+'<br>' : ''}${settings.firmName ? esc(settings.firmName)+'<br>' : ''}${settings.contact ? esc(settings.contact)+'<br>' : ''}Generated ${fmtDate(new Date().toISOString().slice(0,10))}</div></div>`; }
+function exportClientPDF(clientId){
+  const c = findClient(clientId); if(!c) return;
+  const policies = c.policies || []; const age = calcAge(c.dob);
+  const rows = policies.map(p => `<tr><td>${esc(p.name)}</td><td>${esc(p.status||'In Force')}</td><td>${esc(p.category||'—')}</td><td>${esc(p.insurer||'—')}</td><td>${fmtDate(p.inceptionDate)}</td><td>${fmtDate(p.expiryDate)}</td><td>${HOSPITAL_INSURANCE_PRODUCTS.includes(p.name) ? 'N/A' : fmtDate(p.maturityDate)}</td><td>${p.premiumFrequency==='Single Premium'?'N/A':fmtDate(p.premiumDueDate)}</td><td>${p.premiumAmount?'S$ '+Number(p.premiumAmount).toLocaleString(undefined,{minimumFractionDigits:2}):'—'}</td></tr>`).join('');
+  document.getElementById('printArea').innerHTML = `${letterhead()}<div class="print-section"><h3>Client</h3><div class="print-grid"><div><strong>Name</strong><br>${esc(c.name)}</div><div><strong>Date of birth</strong><br>${fmtDate(c.dob)}${age!==null ? ' (Age '+age+')' : ''}</div><div><strong>Phone</strong><br>${esc(c.phone||'—')}</div><div><strong>Email</strong><br>${esc(c.email||'—')}</div><div><strong>Address</strong><br>${esc(c.address||'—')}</div></div>${c.notes ? `<p style="font-size:12px;margin-top:10px;"><strong>Notes:</strong> ${esc(c.notes)}</p>` : ''}</div><div class="print-section"><h3>Policies (${policies.length})</h3>${policies.length === 0 ? '<p style="font-size:12px;color:#888;">No policies on file.</p>' : `<table class="print-table"><thead><tr><th>Policy</th><th>Status</th><th>Category</th><th>Insurer</th><th>Inception</th><th>Expiry</th><th>Maturity</th><th>Premium due</th><th>Premium</th></tr></thead><tbody>${rows}</tbody></table>`}</div>`;
+  window.print();
+}
+function exportPortfolioPDF(){
+  const rows = clients.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c => { const policies = c.policies||[]; const next = policies.filter(p=>p.premiumFrequency!=='Single Premium' && p.premiumDueDate).sort((a,b)=>a.premiumDueDate.localeCompare(b.premiumDueDate))[0]; return `<tr><td>${esc(c.name)}</td><td>${policies.length}</td><td>${[...new Set(policies.map(p=>p.category).filter(Boolean))].map(esc).join(', ') || '—'}</td><td>${next ? fmtDate(next.premiumDueDate) : '—'}</td></tr>`; }).join('');
+  document.getElementById('printArea').innerHTML = `${letterhead()}<div class="print-section"><h3>Portfolio overview — ${clients.length} clients</h3><table class="print-table"><thead><tr><th>Client</th><th>Policies</th><th>Categories</th><th>Next premium due</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  window.print();
+}
+
+/* ============================== ICONS ============================== */
+function icon(name){
+  const icons = {
+    plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+    search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+    printer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 14H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/></svg>',
+    edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>',
+    trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
+    back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+    chevron:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>',
+    file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+    inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+    check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>',
+  };
+  return icons[name] || '';
+}
+
+/* ============================== EVENT DELEGATION ============================== */
+document.addEventListener('click', async (e) => {
+  const t = e.target.closest('[data-action]'); if(!t) return;
+  const action = t.dataset.action; const id = t.dataset.id, clientId = t.dataset.client, policyId = t.dataset.policy, viewName = t.dataset.view;
+  if(action === 'nav'){ view = { type: viewName }; render(); }
+  else if(action === 'view-client'){ view = { type:'client-detail', clientId: id }; render(); }
+  else if(action === 'open-client-form'){ openClientForm(id); }
+  else if(action === 'delete-client'){ deleteClient(id); }
+  else if(action === 'open-policy-form'){ openPolicyForm(clientId, policyId); }
+  else if(action === 'delete-policy'){ deletePolicy(clientId, policyId); }
+  else if(action === 'mark-paid'){ markPaid(clientId, policyId); }
+  else if(action === 'log-contact'){ markContact(id); }
+  else if(action === 'close-modal'){ closeModal(); }
+  else if(action === 'export-client-pdf'){ exportClientPDF(id); }
+  else if(action === 'export-portfolio-pdf'){ exportPortfolioPDF(); }
+  else if(action === 'save-settings'){ saveSettingsForm(); }
+  else if(action === 'export-backup'){ exportBackup(); }
+  else if(action === 'import-backup'){ document.getElementById('backupImportInput')?.click(); }
+});
+
+/* ============================== INIT ============================== */
+(async function init(){ render(); await loadData(); render(); })();
+</script>
+</body>
+</html>
