@@ -1178,6 +1178,14 @@ function investmentCard(inv){
     totalInvested += Number(f.units||0) * Number(f.purchaseNav||0);
     totalValue += Number(f.units||0) * Number(f.latestNav || f.purchaseNav || 0);
   });
+  const PREMIUM_TYPES = ['basic regular premium','bonus unit','single premium','top-up','top up'];
+  var premiumsSGD = 0;
+  (inv.transactions||[]).forEach(function(t){
+    if(PREMIUM_TYPES.some(function(k){ return (t.type||'').toLowerCase().includes(k); }))
+      premiumsSGD += Math.abs(Number(t.amount)||0);
+  });
+  const displayInvested = premiumsSGD > 0 ? premiumsSGD : totalInvested;
+  const displayCcy = premiumsSGD > 0 ? 'SGD' : (inv.currency||'SGD');
   const gain = totalValue - totalInvested;
   const gainPct = totalInvested ? (gain / totalInvested * 100) : null;
   const clientName = (clients.find(function(c){ return c.id === inv.clientId; }) || {}).name || inv.clientId || '—';
@@ -1188,7 +1196,7 @@ function investmentCard(inv){
     +'<button class="btn btn-sm" data-action="refresh-prices" data-id="'+esc(inv.id)+'" title="Refresh NAV" style="padding:6px 8px;">'+icon('refresh')+'</button>'
     +'</div>'
     +'<div style="display:flex;gap:24px;margin-top:12px;flex-wrap:wrap;">'
-    +'<div><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Invested</div><div style="font-size:16px;font-weight:700;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalInvested)+'</div></div>'
+    +'<div><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">'+(premiumsSGD>0?'Premiums Paid':'Invested')+'</div><div style="font-size:16px;font-weight:700;">'+esc(displayCcy)+' '+fmtMoney(displayInvested)+'</div></div>'
     +'<div><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Current Value</div><div style="font-size:16px;font-weight:700;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalValue)+'</div></div>'
     +'<div><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Gain / Loss</div><div style="font-size:16px;font-weight:700;" class="'+perfClass(gain)+'">'+esc(inv.currency||'SGD')+' '+(gain>=0?'+':'')+fmtMoney(gain)+' ('+fmtPct(gainPct)+')</div></div>'
     +'</div>'
@@ -1215,6 +1223,14 @@ function renderInvestmentDetail(main){
   const funds = inv.funds || [];
   const txns  = (inv.transactions || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
   const clientName = (clients.find(function(c){ return c.id === inv.clientId; }) || {}).name || inv.clientId || '—';
+  // Total premiums paid in policy currency (SGD) from transaction history
+  const PREMIUM_TYPES = ['basic regular premium','bonus unit','single premium','top-up','top up'];
+  var totalPremiumsSGD = 0;
+  (inv.transactions||[]).forEach(function(t){
+    if(PREMIUM_TYPES.some(function(k){ return (t.type||'').toLowerCase().includes(k); })){
+      totalPremiumsSGD += Math.abs(Number(t.amount)||0);
+    }
+  });
   var totalInvested = 0, totalValue = 0;
   const rows = funds.map(function(f){
     const cost = Number(f.units||0) * Number(f.purchaseNav||0);
@@ -1222,14 +1238,15 @@ function renderInvestmentDetail(main){
     const gain = val - cost;
     const pct  = cost ? (gain / cost * 100) : null;
     totalInvested += cost; totalValue += val;
+    const fCcy = f.currency || inv.currency || 'SGD';
     return '<tr>'
       +'<td>'+esc(f.name)+'<br><span style="font-size:11px;color:var(--ink-faint);">'+esc(f.isin||'')+'</span></td>'
       +'<td style="text-align:right;">'+(f.allocationPct ? esc(f.allocationPct)+'%' : '—')+'</td>'
       +'<td style="text-align:right;">'+fmtMoney(f.units,4)+'</td>'
-      +'<td style="text-align:right;">'+fmtMoney(f.purchaseNav,4)+'</td>'
-      +'<td style="text-align:right;">'+(f.latestNav ? fmtMoney(f.latestNav,4) : '<span style="color:var(--ink-faint);">—</span>')+'</td>'
-      +'<td style="text-align:right;">'+esc(inv.currency||'SGD')+' '+fmtMoney(cost)+'</td>'
-      +'<td style="text-align:right;" class="'+perfClass(gain)+'">'+esc(inv.currency||'SGD')+' '+(gain>=0?'+':'')+fmtMoney(gain)+'<br><small>'+fmtPct(pct)+'</small></td>'
+      +'<td style="text-align:right;">'+esc(fCcy)+' '+fmtMoney(f.purchaseNav,4)+'</td>'
+      +'<td style="text-align:right;">'+(f.latestNav ? esc(fCcy)+' '+fmtMoney(f.latestNav,4) : '<span style="color:var(--ink-faint);">—</span>')+'</td>'
+      +'<td style="text-align:right;">'+esc(fCcy)+' '+fmtMoney(cost)+'</td>'
+      +'<td style="text-align:right;" class="'+perfClass(gain)+'">'+esc(fCcy)+' '+(gain>=0?'+':'')+fmtMoney(gain)+'<br><small>'+fmtPct(pct)+'</small></td>'
       +'<td style="text-align:right;">'
       +'<button class="btn btn-sm" data-action="open-fund-form" data-inv="'+esc(inv.id)+'" data-fund="'+esc(f.id)+'" title="Edit" style="margin-right:4px;">'+icon('edit')+'</button>'
       +'<button class="btn btn-sm" style="color:var(--red);" data-action="delete-fund" data-inv="'+esc(inv.id)+'" data-fund="'+esc(f.id)+'" title="Remove">'+icon('trash')+'</button>'
@@ -1261,10 +1278,13 @@ function renderInvestmentDetail(main){
     +'</div></div>'
     +'<h2 style="margin:0 0 4px;">'+esc(inv.product)+'</h2>'
     +'<div style="color:var(--ink-faint);font-size:13px;margin-bottom:20px;">'+esc(clientName)+' · Policy No: '+esc(inv.policyNo||'—')+' · '+esc(inv.currency||'SGD')+'</div>'
-    +'<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:24px;">'
-    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Total Invested</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalInvested)+'</div></div>'
-    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Current Value</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalValue)+'</div></div>'
-    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Total Gain / Loss</div><div style="font-size:20px;font-weight:700;margin-top:4px;" class="'+perfClass(totalGain)+'">'+(totalGain>=0?'+':'')+fmtMoney(totalGain)+'<br><small style="font-size:13px;">'+fmtPct(totalPct)+'</small></div></div>'
+    +'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;">'
+    +(totalPremiumsSGD > 0
+      ? '<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Premiums Paid (SGD)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(totalPremiumsSGD)+'</div></div>'
+      : '<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Total Invested</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalInvested)+'</div></div>')
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Cost (Fund Ccy)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+fmtMoney(totalInvested)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Avg cost × net units</div></div>'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Value (Fund Ccy)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+fmtMoney(totalValue)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Net units × latest NAV</div></div>'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Gain / Loss</div><div style="font-size:20px;font-weight:700;margin-top:4px;" class="'+perfClass(totalGain)+'">'+(totalGain>=0?'+':'')+fmtMoney(totalGain)+'<br><small style="font-size:13px;">'+fmtPct(totalPct)+'</small></div></div>'
     +'</div>'
     +'<h3 style="margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);">Fund Holdings</h3>'
     +(funds.length === 0
@@ -1447,12 +1467,59 @@ function openImportCSV(invId){
         added++;
       });
       inv.transactions.sort(function(a,b){ return b.date.localeCompare(a.date); });
+      recomputeHoldingsFromTransactions(inv);
     }
     await saveOneInvestment(inv);
     closeModal();
     if(view.type==='investment-detail') render();
     toast('Imported: '+added+' added'+(updated?' / '+updated+' updated':'')+(skipped?' / '+skipped+' skipped':'')+'.') ;
   };
+}
+function recomputeHoldingsFromTransactions(inv){
+  if(!inv.transactions || !inv.transactions.length) return;
+  const fundMap = {};
+  inv.transactions.forEach(function(t){
+    if(!t.fundName) return;
+    const key = t.isin || t.fundName;
+    if(!fundMap[key]){
+      // extract currency from fund name e.g. "AB Low Volatility Equity Fund (USD)" → USD
+      // "BlackRock World Gold Fund (SGD Hedged)" → SGD
+      const currMatch = t.fundName.match(/\(([A-Z]{3})(?:\s+Hedged)?\)/);
+      fundMap[key] = {
+        name: t.fundName, isin: t.isin||'',
+        currency: currMatch ? currMatch[1] : (inv.currency||'SGD'),
+        netUnits: 0, posUnits: 0, posCost: 0, latestPrice: 0
+      };
+    }
+    const fm = fundMap[key];
+    const u = Number(t.units)||0;
+    const p = Number(t.price)||0;
+    fm.netUnits += u;
+    if(u > 0){ fm.posUnits += u; fm.posCost += u * p; }
+    if(p > 0) fm.latestPrice = p; // last known price
+    if(t.isin && !fm.isin) fm.isin = t.isin;
+  });
+  const prevFunds = inv.funds || [];
+  inv.funds = Object.keys(fundMap).map(function(key){
+    const fm = fundMap[key];
+    const existing = prevFunds.find(function(f){
+      return (fm.isin && f.isin && f.isin===fm.isin) || f.name.toLowerCase()===fm.name.toLowerCase();
+    });
+    const weightedAvgNav = fm.posUnits > 0 ? parseFloat((fm.posCost / fm.posUnits).toFixed(6)) : 0;
+    const netUnits = parseFloat(Math.max(0, fm.netUnits).toFixed(6));
+    return {
+      id: existing ? existing.id : uid(),
+      name: fm.name,
+      isin: fm.isin || (existing ? existing.isin||'' : ''),
+      currency: fm.currency,
+      units: netUnits,
+      purchaseNav: weightedAvgNav,
+      latestNav: existing && existing.latestNav ? existing.latestNav : null,
+      allocationPct: existing ? existing.allocationPct||null : null,
+      navDate: existing ? existing.navDate||null : null,
+      navName: existing ? existing.navName||null : null,
+    };
+  });
 }
 async function deleteTransaction(invId, txId){
   const inv = investments.find(function(i){ return i.id===invId; });
