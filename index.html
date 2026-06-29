@@ -271,6 +271,20 @@
   .mix-count{width:140px;text-align:right;font-family:var(--mono);font-size:12px;color:var(--ink-soft);flex-shrink:0;}
 
   /* ---------- responsive ---------- */
+  /* ---------- investments ---------- */
+  .inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
+  .fund-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .fund-table th{text-align:left;padding:9px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:0.4px;color:var(--ink-faint);font-weight:600;border-bottom:2px solid var(--line);white-space:nowrap;}
+  .fund-table td{padding:11px 12px;border-bottom:1px solid var(--line-soft);vertical-align:middle;}
+  .fund-table tbody tr:last-child td{border-bottom:none;}
+  .fund-table tbody tr:hover td{background:#FAFBFC;}
+  .fund-table tfoot td{border-top:2px solid var(--line);font-weight:700;background:var(--paper);padding:11px 12px;}
+  .perf-gain{color:var(--green);font-weight:600;}
+  .perf-loss{color:var(--red);font-weight:600;}
+  .perf-flat{color:var(--ink-faint);}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .spinning{animation:spin 1s linear infinite;}
+
   /* --- active tab looping animation --- */
   @keyframes navActivePulse {
     0%, 65%, 100% { background: rgba(255,255,255,0.09); }
@@ -342,6 +356,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Clients
       </button>
+      <button class="nav-item" data-action="nav" data-view="investments">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+        Investments
+      </button>
       <button class="nav-item" data-action="nav" data-view="settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 1 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Settings
@@ -389,7 +407,11 @@ let settings = { advisorName: '', firmName: '', contact: '' };
 let view = { type: 'dashboard' };
 let editingClientId = null;
 let editingPolicy = null;
+let editingInvestment = null;
+let investments = [];
 let dataLoaded = false;
+const WORKER_URL = 'https://silent-moon-f65a.chong-eanqi121.workers.dev';
+const HSBC_ILP_PRODUCTS = ['Pulsar','Wealth Voyage','Wealth Harvest','Wealth Accelerate'];
 
 const CAT_PALETTE = ['#2F6F5E','#3D5A80','#9C6644','#6B4E71','#4C7A4C','#8A5A44','#5B7B9A','#B8742B','#7A5C61','#4F6D7A'];
 
@@ -423,11 +445,13 @@ function userRef(){ return db.collection('users').doc(currentUser.uid); }
 async function loadData(){
   if(currentUser && FB_READY){
     try{
-      const [clientsSnap, settingsDoc] = await Promise.all([
+      const [clientsSnap, settingsDoc, invSnap] = await Promise.all([
         userRef().collection('clients').get(),
-        userRef().collection('settings').doc('main').get()
+        userRef().collection('settings').doc('main').get(),
+        userRef().collection('investments').get()
       ]);
       clients = clientsSnap.docs.map(d => d.data());
+      investments = invSnap.docs.map(d => d.data());
       if(settingsDoc.exists){
         const d = settingsDoc.data();
         categories = d.categories || [];
@@ -614,6 +638,8 @@ function render(){
   if(view.type === 'dashboard') return renderDashboard(main);
   if(view.type === 'clients') return renderClientsList(main);
   if(view.type === 'client-detail') return renderClientDetail(main);
+  if(view.type === 'investments') return renderInvestments(main);
+  if(view.type === 'investment-detail') return renderInvestmentDetail(main);
   if(view.type === 'settings') return renderSettings(main);
 }
 
@@ -1081,6 +1107,265 @@ function exportPortfolioPDF(){
   window.print();
 }
 
+/* ============================== INVESTMENTS — STORAGE ============================== */
+async function saveOneInvestment(inv){
+  if(currentUser && FB_READY){
+    try{ await userRef().collection('investments').doc(inv.id).set(inv); }
+    catch(e){ toast('Investment save failed: ' + e.message, 'danger'); }
+  }
+}
+async function deleteOneInvestment(id){
+  if(currentUser && FB_READY){
+    try{ await userRef().collection('investments').doc(id).delete(); }
+    catch(e){ toast('Investment delete failed: ' + e.message, 'danger'); }
+  }
+}
+
+/* ============================== INVESTMENTS — NAV REFRESH ============================== */
+async function refreshPrices(invId, silent){
+  const inv = investments.find(i => i.id === invId);
+  if(!inv || !inv.funds || !inv.funds.length) return;
+  const symbols = inv.funds.filter(f => f.isin && f.currency).map(f => `${f.isin}:${f.currency}`);
+  if(!symbols.length){ if(!silent) toast('No funds with ISIN/currency set.', 'warn'); return; }
+  const btn = document.querySelector(`[data-action="refresh-prices"][data-id="${invId}"]`);
+  if(btn) btn.querySelector('svg')?.classList.add('spinning');
+  try{
+    const res = await fetch(`${WORKER_URL}?symbols=${symbols.join(',')}`);
+    if(!res.ok) throw new Error('Worker HTTP ' + res.status);
+    const json = await res.json();
+    if(!json.ok) throw new Error(json.error || 'Worker error');
+    inv.funds.forEach(f => {
+      const sym = `${f.isin}:${f.currency}`;
+      const d = json.data[sym];
+      if(d && d.price){ f.latestNav = d.price; f.navDate = d.priceDate; f.navName = d.name; }
+    });
+    inv.lastRefreshed = new Date().toISOString();
+    await saveOneInvestment(inv);
+    if(!silent) toast('Prices updated.');
+    if(view.type === 'investments' || view.type === 'investment-detail') render();
+  }catch(e){
+    if(!silent) toast('Refresh failed: ' + e.message, 'danger');
+  }finally{
+    if(btn) btn.querySelector('svg')?.classList.remove('spinning');
+  }
+}
+
+async function refreshAllPrices(){
+  const btn = document.querySelector('[data-action="refresh-all-prices"]');
+  if(btn){ btn.disabled = true; btn.querySelector('svg')?.classList.add('spinning'); }
+  await Promise.allSettled(investments.map(inv => refreshPrices(inv.id, true)));
+  if(btn){ btn.disabled = false; btn.querySelector('svg')?.classList.remove('spinning'); }
+  toast('All portfolios refreshed.');
+  if(view.type === 'investments' || view.type === 'investment-detail') render();
+}
+
+/* ============================== INVESTMENTS — RENDER ============================== */
+function fmtMoney(n, dec){
+  dec = dec == null ? 2 : dec;
+  if(n == null || isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-SG', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function fmtPct(n){
+  if(n == null || isNaN(n)) return '—';
+  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+function perfClass(n){ return n == null || isNaN(n) ? 'perf-flat' : n > 0 ? 'perf-gain' : n < 0 ? 'perf-loss' : 'perf-flat'; }
+
+function investmentCard(inv){
+  const funds = inv.funds || [];
+  var totalInvested = 0, totalValue = 0;
+  funds.forEach(function(f){
+    totalInvested += Number(f.units||0) * Number(f.purchaseNav||0);
+    totalValue += Number(f.units||0) * Number(f.latestNav || f.purchaseNav || 0);
+  });
+  const gain = totalValue - totalInvested;
+  const gainPct = totalInvested ? (gain / totalInvested * 100) : null;
+  const clientName = (clients.find(function(c){ return c.id === inv.clientId; }) || {}).name || inv.clientId || '—';
+  return '<div class="card" style="cursor:pointer;padding:18px 20px;" data-action="view-investment" data-id="'+esc(inv.id)+'">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
+    +'<div><div style="font-weight:700;font-size:15px;">'+esc(inv.product)+'</div>'
+    +'<div style="font-size:12px;color:var(--ink-faint);margin-top:2px;">'+esc(clientName)+' · Policy No: '+esc(inv.policyNo||'—')+'</div></div>'
+    +'<button class="btn btn-sm" data-action="refresh-prices" data-id="'+esc(inv.id)+'" title="Refresh NAV" style="padding:6px 8px;">'+icon('refresh')+'</button>'
+    +'</div>'
+    +'<div style="display:flex;gap:24px;margin-top:12px;flex-wrap:wrap;">'
+    +'<div><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Invested</div><div style="font-size:16px;font-weight:700;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalInvested)+'</div></div>'
+    +'<div><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Current Value</div><div style="font-size:16px;font-weight:700;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalValue)+'</div></div>'
+    +'<div><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Gain / Loss</div><div style="font-size:16px;font-weight:700;" class="'+perfClass(gain)+'">'+esc(inv.currency||'SGD')+' '+(gain>=0?'+':'')+fmtMoney(gain)+' ('+fmtPct(gainPct)+')</div></div>'
+    +'</div>'
+    +(inv.lastRefreshed ? '<div style="font-size:11px;color:var(--ink-faint);margin-top:8px;">Last refreshed: '+new Date(inv.lastRefreshed).toLocaleString('en-SG')+'</div>' : '')
+    +'</div>';
+}
+
+function renderInvestments(main){
+  main.innerHTML = '<div class="content">'
+    +'<div class="page-header"><h2>Investment Portfolios</h2>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    +'<button class="btn btn-sm" data-action="refresh-all-prices">'+icon('refresh')+' Refresh All NAV</button>'
+    +'<button class="btn btn-primary" data-action="open-investment-form">'+icon('plus')+' Add Portfolio</button>'
+    +'</div></div>'
+    +(investments.length === 0
+      ? '<div class="empty-state"><p>No investment portfolios yet. Click <strong>Add Portfolio</strong> to get started.</p></div>'
+      : '<div class="inv-grid">'+investments.map(investmentCard).join('')+'</div>')
+    +'</div>';
+}
+
+function renderInvestmentDetail(main){
+  const inv = investments.find(function(i){ return i.id === view.invId; });
+  if(!inv){ view = { type:'investments' }; render(); return; }
+  const funds = inv.funds || [];
+  const clientName = (clients.find(function(c){ return c.id === inv.clientId; }) || {}).name || inv.clientId || '—';
+  var totalInvested = 0, totalValue = 0;
+  const rows = funds.map(function(f){
+    const cost = Number(f.units||0) * Number(f.purchaseNav||0);
+    const val  = Number(f.units||0) * Number(f.latestNav || f.purchaseNav || 0);
+    const gain = val - cost;
+    const pct  = cost ? (gain / cost * 100) : null;
+    totalInvested += cost; totalValue += val;
+    return '<tr>'
+      +'<td>'+esc(f.name)+'<br><span style="font-size:11px;color:var(--ink-faint);">'+esc(f.isin||'')+'</span></td>'
+      +'<td style="text-align:right;">'+fmtMoney(f.units,4)+'</td>'
+      +'<td style="text-align:right;">'+fmtMoney(f.purchaseNav,4)+'</td>'
+      +'<td style="text-align:right;">'+(f.latestNav ? fmtMoney(f.latestNav,4) : '<span style="color:var(--ink-faint);">—</span>')+'</td>'
+      +'<td style="text-align:right;">'+esc(inv.currency||'SGD')+' '+fmtMoney(cost)+'</td>'
+      +'<td style="text-align:right;" class="'+perfClass(gain)+'">'+esc(inv.currency||'SGD')+' '+(gain>=0?'+':'')+fmtMoney(gain)+'<br><small>'+fmtPct(pct)+'</small></td>'
+      +'<td style="text-align:right;">'
+      +'<button class="btn btn-sm" data-action="open-fund-form" data-inv="'+esc(inv.id)+'" data-fund="'+esc(f.id)+'" title="Edit" style="margin-right:4px;">'+icon('edit')+'</button>'
+      +'<button class="btn btn-sm" style="color:var(--red);" data-action="delete-fund" data-inv="'+esc(inv.id)+'" data-fund="'+esc(f.id)+'" title="Remove">'+icon('trash')+'</button>'
+      +'</td></tr>';
+  }).join('');
+  const totalGain = totalValue - totalInvested;
+  const totalPct  = totalInvested ? (totalGain / totalInvested * 100) : null;
+  main.innerHTML = '<div class="content">'
+    +'<div class="page-header">'
+    +'<button class="btn btn-sm" data-action="nav" data-view="investments">'+icon('back')+' Portfolios</button>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    +'<button class="btn btn-sm" data-action="refresh-prices" data-id="'+esc(inv.id)+'">'+icon('refresh')+' Refresh NAV</button>'
+    +'<button class="btn btn-sm" data-action="open-fund-form" data-inv="'+esc(inv.id)+'">'+icon('plus')+' Add Fund</button>'
+    +'<button class="btn btn-sm" data-action="open-investment-form" data-id="'+esc(inv.id)+'">'+icon('edit')+' Edit</button>'
+    +'<button class="btn btn-sm" style="color:var(--red);" data-action="delete-investment" data-id="'+esc(inv.id)+'">'+icon('trash')+' Delete</button>'
+    +'</div></div>'
+    +'<h2 style="margin:0 0 4px;">'+esc(inv.product)+'</h2>'
+    +'<div style="color:var(--ink-faint);font-size:13px;margin-bottom:20px;">'+esc(clientName)+' · Policy No: '+esc(inv.policyNo||'—')+' · '+esc(inv.currency||'SGD')+'</div>'
+    +'<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:24px;">'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Total Invested</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalInvested)+'</div></div>'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Current Value</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalValue)+'</div></div>'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Total Gain / Loss</div><div style="font-size:20px;font-weight:700;margin-top:4px;" class="'+perfClass(totalGain)+'">'+(totalGain>=0?'+':'')+fmtMoney(totalGain)+'<br><small style="font-size:13px;">'+fmtPct(totalPct)+'</small></div></div>'
+    +'</div>'
+    +(funds.length === 0
+      ? '<div class="empty-state"><p>No funds added yet. Click <strong>Add Fund</strong>.</p></div>'
+      : '<div style="overflow-x:auto;"><table class="fund-table">'
+        +'<thead><tr><th>Fund Name / ISIN</th><th style="text-align:right;">Units</th><th style="text-align:right;">Purchase NAV</th><th style="text-align:right;">Latest NAV</th><th style="text-align:right;">Cost</th><th style="text-align:right;">Gain / Loss</th><th style="text-align:right;">Actions</th></tr></thead>'
+        +'<tbody>'+rows+'</tbody>'
+        +'<tfoot><tr><td colspan="4">Total</td><td style="text-align:right;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalInvested)+'</td><td style="text-align:right;" class="'+perfClass(totalGain)+'">'+esc(inv.currency||'SGD')+' '+(totalGain>=0?'+':'')+fmtMoney(totalGain)+' ('+fmtPct(totalPct)+')</td><td></td></tr></tfoot>'
+        +'</table></div>')
+    +(inv.lastRefreshed ? '<div style="font-size:11px;color:var(--ink-faint);margin-top:10px;">Prices last refreshed: '+new Date(inv.lastRefreshed).toLocaleString('en-SG')+'</div>' : '')
+    +'</div>';
+}
+
+/* ============================== INVESTMENTS — MODALS ============================== */
+function openInvestmentForm(id){
+  const inv = id ? investments.find(function(i){ return i.id === id; }) : null;
+  editingInvestment = inv ? inv.id : null;
+  const clientOpts = clients.slice().sort(function(a,b){ return a.name.localeCompare(b.name); }).map(function(c){
+    return '<option value="'+esc(c.id)+'"'+(inv && inv.clientId === c.id ? ' selected' : '')+'>'+esc(c.name)+'</option>';
+  }).join('');
+  const productOpts = HSBC_ILP_PRODUCTS.map(function(p){
+    return '<option value="'+esc(p)+'"'+(inv && inv.product === p ? ' selected' : '')+'>'+esc(p)+'</option>';
+  }).join('');
+  openModal('<div class="modal-header"><h3>'+(inv ? 'Edit' : 'Add')+' Portfolio</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
+    +'<form id="invForm">'
+    +'<label>Client<select name="clientId" required style="margin-top:4px;">'+clientOpts+'</select></label>'
+    +'<label style="margin-top:12px;">HSBC ILP Product<select name="product" required style="margin-top:4px;">'+productOpts+'</select></label>'
+    +'<label style="margin-top:12px;">Policy Number<input name="policyNo" value="'+esc(inv ? inv.policyNo||'' : '')+'" placeholder="e.g. P12345678"></label>'
+    +'<label style="margin-top:12px;">Base Currency<select name="currency" style="margin-top:4px;">'
+    +'<option value="SGD"'+(!inv||inv.currency==='SGD'?' selected':'')+'>SGD</option>'
+    +'<option value="USD"'+(inv&&inv.currency==='USD'?' selected':'')+'>USD</option>'
+    +'<option value="HKD"'+(inv&&inv.currency==='HKD'?' selected':'')+'>HKD</option>'
+    +'</select></label>'
+    +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">'
+    +'<button type="button" class="btn btn-sm" data-action="close-modal">Cancel</button>'
+    +'<button type="submit" class="btn btn-primary">Save Portfolio</button>'
+    +'</div></form>');
+  document.getElementById('invForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    if(inv){
+      Object.assign(inv, { clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), currency: fd.get('currency') });
+      await saveOneInvestment(inv);
+    } else {
+      const ni = { id: uid(), clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), currency: fd.get('currency'), funds: [], lastRefreshed: null };
+      investments.push(ni);
+      await saveOneInvestment(ni);
+    }
+    closeModal();
+    if(view.type === 'investments' || view.type === 'investment-detail') render();
+    toast(inv ? 'Portfolio updated.' : 'Portfolio added.');
+  });
+}
+
+function openFundForm(invId, fundId){
+  const inv = investments.find(function(i){ return i.id === invId; });
+  if(!inv) return;
+  const fund = fundId ? (inv.funds||[]).find(function(f){ return f.id === fundId; }) : null;
+  const currOpts = ['USD','SGD','HKD','EUR','GBP'].map(function(c){
+    return '<option value="'+c+'"'+(fund && fund.currency===c ? ' selected' : '')+'>'+c+'</option>';
+  }).join('');
+  openModal('<div class="modal-header"><h3>'+(fund ? 'Edit' : 'Add')+' Fund</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
+    +'<form id="fundForm">'
+    +'<label>Fund Name<input name="name" value="'+esc(fund ? fund.name||'' : '')+'" placeholder="e.g. Fidelity Global Technology" required></label>'
+    +'<label style="margin-top:12px;">ISIN <span style="color:var(--ink-faint);font-size:11px;">(for live NAV)</span><input name="isin" value="'+esc(fund ? fund.isin||'' : '')+'" placeholder="e.g. LU0095077415" style="text-transform:uppercase;"></label>'
+    +'<label style="margin-top:12px;">Fund Currency<select name="currency" style="margin-top:4px;">'+currOpts+'</select></label>'
+    +'<label style="margin-top:12px;">Units Held<input name="units" type="number" step="0.0001" min="0" value="'+(fund ? fund.units||'' : '')+'" placeholder="e.g. 1500.5" required></label>'
+    +'<label style="margin-top:12px;">Purchase NAV (per unit)<input name="purchaseNav" type="number" step="0.0001" min="0" value="'+(fund ? fund.purchaseNav||'' : '')+'" placeholder="e.g. 12.3456" required></label>'
+    +'<label style="margin-top:12px;">Latest NAV <span style="color:var(--ink-faint);font-size:11px;">(auto-filled on refresh)</span><input name="latestNav" type="number" step="0.0001" min="0" value="'+(fund ? fund.latestNav||'' : '')+'"></label>'
+    +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">'
+    +'<button type="button" class="btn btn-sm" data-action="close-modal">Cancel</button>'
+    +'<button type="submit" class="btn btn-primary">Save Fund</button>'
+    +'</div></form>');
+  document.getElementById('fundForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const fdata = {
+      id: fund ? fund.id : uid(),
+      name: fd.get('name'), isin: (fd.get('isin')||'').toUpperCase(),
+      currency: fd.get('currency'), units: parseFloat(fd.get('units')),
+      purchaseNav: parseFloat(fd.get('purchaseNav')),
+      latestNav: fd.get('latestNav') ? parseFloat(fd.get('latestNav')) : (fund ? fund.latestNav||null : null),
+      navDate: fund ? fund.navDate||null : null, navName: fund ? fund.navName||null : null,
+    };
+    if(!inv.funds) inv.funds = [];
+    if(fund){
+      const idx = inv.funds.findIndex(function(f){ return f.id === fund.id; });
+      if(idx >= 0) inv.funds[idx] = fdata;
+    } else {
+      inv.funds.push(fdata);
+    }
+    await saveOneInvestment(inv);
+    closeModal();
+    if(view.type === 'investments' || view.type === 'investment-detail') render();
+    toast(fund ? 'Fund updated.' : 'Fund added.');
+  });
+}
+
+async function deleteInvestment(id){
+  if(!confirm('Delete this portfolio and all its fund data?')) return;
+  investments = investments.filter(function(i){ return i.id !== id; });
+  await deleteOneInvestment(id);
+  view = { type: 'investments' };
+  render();
+  toast('Portfolio deleted.');
+}
+
+async function deleteFund(invId, fundId){
+  const inv = investments.find(function(i){ return i.id === invId; });
+  if(!inv) return;
+  if(!confirm('Remove this fund from the portfolio?')) return;
+  inv.funds = (inv.funds||[]).filter(function(f){ return f.id !== fundId; });
+  await saveOneInvestment(inv);
+  render();
+  toast('Fund removed.');
+}
+
 /* ============================== ICONS ============================== */
 function icon(name){
   const icons = {
@@ -1094,6 +1379,7 @@ function icon(name){
     file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
     inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
     check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>',
+    refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>',
   };
   return icons[name] || '';
 }
@@ -1117,6 +1403,13 @@ document.addEventListener('click', async (e) => {
   else if(action === 'export-backup'){ exportBackup(); }
   else if(action === 'import-backup'){ document.getElementById('backupImportInput')?.click(); }
   else if(action === 'sign-out'){ if(auth) auth.signOut(); }
+  else if(action === 'view-investment'){ view = { type:'investment-detail', invId: id }; render(); }
+  else if(action === 'open-investment-form'){ openInvestmentForm(id); }
+  else if(action === 'delete-investment'){ deleteInvestment(id); }
+  else if(action === 'open-fund-form'){ openFundForm(t.dataset.inv, t.dataset.fund); }
+  else if(action === 'delete-fund'){ deleteFund(t.dataset.inv, t.dataset.fund); }
+  else if(action === 'refresh-prices'){ refreshPrices(id, false); }
+  else if(action === 'refresh-all-prices'){ refreshAllPrices(); }
 });
 
 /* ============================== INIT ============================== */
