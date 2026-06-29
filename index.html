@@ -410,9 +410,12 @@ const PRODUCT_CATALOG = [
   { category:'Savings & ILPs', name:'InvestFlex', desc:'' },
   { category:'Savings & ILPs', name:'InvestFlex Vantage', desc:'' },
   { category:'Savings & ILPs', name:'InvestFlex Trivantage', desc:'' },
+  { category:'Savings & ILPs', name:'Pulsar', desc:'A regular premium ILP with a partial withdrawal facility. Remind client to plan ahead — submit the withdrawal form 30 days before the intended date (5–7 working days processing).' },
 ];
 const CATALOG_CATEGORIES = [...new Set(PRODUCT_CATALOG.map(p => p.category))];
 const HOSPITAL_INSURANCE_PRODUCTS = ['Enhanced IncomeShield', 'IncomeShield', 'IncomeShield Standard Plan'];
+const PARTIAL_WITHDRAWAL_PRODUCTS = ['Pulsar'];
+function isPulsarPolicy(p){ return PARTIAL_WITHDRAWAL_PRODUCTS.some(n => (p.name||'').toLowerCase().includes(n.toLowerCase())); }
 
 /* ============================== STORAGE ============================== */
 function userRef(){ return db.collection('users').doc(currentUser.uid); }
@@ -658,6 +661,13 @@ function renderDashboard(main){
   maturingSoon.filter(x => x.d >= 0 && x.d <= 7).forEach(x => thisWeek.push({ ...x, kind:'maturity' }));
   const birthdaysAll = clients.map(c => ({ c, nb: nextBirthday(c.dob) })).filter(x => x.nb);
   birthdaysAll.filter(x => x.nb.days <= 7).forEach(x => thisWeek.push({ d:x.nb.days, kind:'birthday', client:x.c, turningAge:x.nb.turningAge }));
+  const withdrawalReminders = inForcePolicies
+    .filter(p => isPulsarPolicy(p) && p.partialWithdrawalDate && p.partialWithdrawalAmount)
+    .map(p => ({ p, client: p.client, d: daysUntil(p.partialWithdrawalDate) }))
+    .filter(x => x.d !== null && x.d > -14)
+    .sort((a,b) => a.d - b.d);
+  withdrawalReminders.filter(x => (x.d - 30) >= -3 && (x.d - 30) <= 7)
+    .forEach(x => thisWeek.push({ d: Math.max(0, x.d - 30), kind:'withdrawal-submit', p: x.p, dw: x.d }));
   thisWeek.sort((a,b) => a.d - b.d);
   const birthdaysSoon = birthdaysAll.filter(x => x.nb.days <= 30).sort((a,b) => a.nb.days - b.nb.days);
   const needsTouch = clients.map(c => ({ c, days: daysSinceContact(c) })).filter(x => x.days >= TOUCH_BASE_DAYS).sort((a,b) => b.days - a.days);
@@ -685,12 +695,13 @@ function renderDashboard(main){
         <div class="stat-card ok"><div class="num">${money(totalAnnualized)}</div><div class="lbl">Annualised premium in force</div></div>
         <div class="stat-card"><div class="num">${money(totalSingle)}</div><div class="lbl">Single-premium total</div></div>
       </div>
-      <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>This week at a glance</h2><span class="col-label">Next 7 days</span></div><div class="panel-body">${thisWeek.length === 0 ? emptyInline('Nothing landing in the next 7 days — a quiet week.') : thisWeek.map(x => x.kind === 'birthday' ? birthdayRow(x.client, x.d, x.turningAge) : reminderRow(x.p, x.p.client, x.d, x.kind)).join('')}</div></div>
+      <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>This week at a glance</h2><span class="col-label">Next 7 days</span></div><div class="panel-body">${thisWeek.length === 0 ? emptyInline('Nothing landing in the next 7 days — a quiet week.') : thisWeek.map(x => x.kind === 'birthday' ? birthdayRow(x.client, x.d, x.turningAge) : x.kind === 'withdrawal-submit' ? withdrawalRow(x.p, x.p.client, x.dw) : reminderRow(x.p, x.p.client, x.d, x.kind)).join('')}</div></div>
       ${lapsingRisk.length > 0 ? `<div class="panel panel-alert" style="margin-bottom:18px;"><div class="panel-head"><h2>Lapsing risk</h2><span class="badge danger">Act now</span></div><div class="panel-body">${lapsingRisk.map(x => reminderRow(x.p, x.p.client, x.d, 'premium', true)).join('')}</div></div>` : ''}
       <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Premiums due soon</h2><span class="col-label">Next 30 days</span></div><div class="panel-body">${duesSoon.length === 0 ? emptyInline('Nothing due in the next 30 days.') : duesSoon.slice(0,8).map(x => reminderRow(x.p, x.p.client, x.d, 'premium')).join('')}</div></div>
       <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Hospital plan premium reviews</h2><span class="col-label">Renewing within 6 months</span></div><div class="panel-body">${premiumReviewDue.length === 0 ? emptyInline('No hospital plan renewals within 6 months.') : premiumReviewDue.map(x => premiumReviewRow(x.p, x.p.client, x.d)).join('')}</div></div>
       <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Policies expiring</h2><span class="col-label">Next 60 days</span></div><div class="panel-body">${expiringSoon.length === 0 ? emptyInline('No expiries coming up in the next 60 days.') : expiringSoon.slice(0,8).map(x => reminderRow(x.p, x.p.client, x.d, 'expiry')).join('')}</div></div>
       <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Maturing soon</h2><span class="col-label">Next 90 days</span></div><div class="panel-body">${maturingSoon.length === 0 ? emptyInline('No maturities coming up in the next 90 days.') : maturingSoon.slice(0,8).map(x => reminderRow(x.p, x.p.client, x.d, 'maturity')).join('')}</div></div>
+      <div class="panel ${withdrawalReminders.length ? 'panel-alert' : ''}" style="margin-bottom:18px;"><div class="panel-head" style="${withdrawalReminders.length ? '' : ''}"><h2 style="${withdrawalReminders.length ? 'color:var(--amber)' : ''}">Pulsar partial withdrawals</h2><span class="col-label">Submit form 30 days before · 5–7 working days processing</span></div><div class="panel-body">${withdrawalReminders.length === 0 ? emptyInline('No partial withdrawals planned — add one when editing a Pulsar policy.') : withdrawalReminders.map(x => withdrawalRow(x.p, x.client, x.d)).join('')}</div></div>
       <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Birthdays</h2><span class="col-label">Next 30 days</span></div><div class="panel-body">${birthdaysSoon.length === 0 ? emptyInline('No client birthdays in the next 30 days.') : birthdaysSoon.map(x => birthdayRow(x.c, x.nb.days, x.nb.turningAge)).join('')}</div></div>
       <div class="panel" style="margin-bottom:18px;"><div class="panel-head"><h2>Needs a touch base</h2><span class="col-label">No contact in ${TOUCH_BASE_DAYS}+ days</span></div><div class="panel-body">${needsTouch.length === 0 ? emptyInline('Everyone has been contacted recently — nice work.') : needsTouch.slice(0,10).map(x => touchRow(x.c, x.days)).join('')}</div></div>
       <div class="panel"><div class="panel-head"><h2>Policy mix</h2><span class="col-label">${allPolicies.length} policies by category</span></div><div class="panel-body">${mix.length === 0 ? emptyInline("Add policies to see your book's category mix.") : mix.map(([cat, v]) => mixRow(cat, v, maxMixCount)).join('')}</div></div>
@@ -717,6 +728,20 @@ function birthdayRow(c, days, turningAge){
 function touchRow(c, days){
   const label = days === Infinity ? 'Never logged' : days + 'd since last contact';
   return `<div class="reminder-row"><div class="reminder-main"><span class="reminder-dot" style="background:var(--ink-faint)"></span><div class="reminder-text"><div class="name" data-action="view-client" data-id="${c.id}" style="cursor:pointer;">${esc(c.name)}</div><div class="meta">${(c.policies||[]).length} polic${(c.policies||[]).length===1?'y':'ies'} on file</div></div></div><div class="reminder-meta"><div class="date">${label}</div><div style="margin-top:3px;"><button class="btn btn-ghost btn-sm" data-action="log-contact" data-id="${c.id}">${icon('check')} Log contact</button></div></div></div>`;
+}
+function withdrawalRow(p, client, d){
+  const submitDue = d - 30;
+  const submitDeadlineIso = new Date(new Date(p.partialWithdrawalDate + 'T00:00:00').getTime() - 30 * 86400000).toISOString().slice(0,10);
+  let sCls, sLabel;
+  if(submitDue < -7){ sCls = 'neutral'; sLabel = 'Withdrawal passed'; }
+  else if(submitDue < 0){ sCls = 'danger'; sLabel = 'Form overdue — submit now!'; }
+  else if(submitDue === 0){ sCls = 'danger'; sLabel = 'Submit form today'; }
+  else if(submitDue <= 7){ sCls = 'danger'; sLabel = 'Submit form this week'; }
+  else if(submitDue <= 21){ sCls = 'warn'; sLabel = 'Submit form soon'; }
+  else { sCls = 'neutral'; sLabel = 'Planned'; }
+  const submitLabel = submitDue < 0 ? Math.abs(submitDue)+'d overdue to submit' : submitDue === 0 ? 'Submit today' : 'Submit in '+submitDue+'d';
+  const amt = p.partialWithdrawalAmount ? 'S$ '+Number(p.partialWithdrawalAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+  return `<div class="reminder-row"><div class="reminder-main"><span class="reminder-dot" style="background:var(--amber)"></span><div class="reminder-text"><div class="name">${esc(p.name)} <span style="color:var(--ink-faint);font-weight:400;">— ${esc(client.name)}</span></div><div class="meta">Partial withdrawal ${amt} on ${fmtDate(p.partialWithdrawalDate)}${p.partialWithdrawalPurpose ? ' · <em>'+esc(p.partialWithdrawalPurpose)+'</em>' : ''}</div><div class="meta" style="color:var(--amber);margin-top:2px;font-weight:500;">Submit form by ${fmtDate(submitDeadlineIso)} · 5–7 working days processing</div></div></div><div class="reminder-meta"><div><span class="badge ${sCls}">${sLabel}</span></div><div class="date" style="margin-top:5px;">${submitLabel}</div></div></div>`;
 }
 function mixRow(cat, v, maxCount){
   const pct = maxCount ? Math.round((v.count / maxCount) * 100) : 0;
@@ -795,7 +820,7 @@ function policyCard(c, p){
   const es = expiryStatus(p);
   const status = p.status || 'In Force';
   const statusCls = status === 'In Force' ? 'ok' : status === 'Lapsed' ? 'danger' : 'neutral';
-  return `<div class="policy-card" style="border-left-color:${catColor(p.category)}"><div class="policy-top"><div><div class="policy-title">${esc(p.name)}</div><div class="policy-insurer">${esc(p.insurer||'—')} ${p.policyNumber ? '· '+esc(p.policyNumber) : ''}</div></div><div class="policy-actions"><span class="badge ${statusCls}">${esc(status)}</span><span class="badge neutral" style="background:${catColor(p.category)}22;color:${catColor(p.category)};">${esc(p.category||'Uncategorised')}</span><button class="icon-btn" data-action="open-policy-form" data-client="${c.id}" data-policy="${p.id}" title="Edit">${icon('edit')}</button><button class="icon-btn" data-action="delete-policy" data-client="${c.id}" data-policy="${p.id}" title="Delete">${icon('trash')}</button></div></div><div class="policy-dates"><div><span class="col-label">Inception</span><span class="val">${fmtDate(p.inceptionDate)}</span></div><div><span class="col-label">Expiry</span><span class="val">${fmtDate(p.expiryDate)} ${es?`<span class="badge ${es.cls}" style="margin-left:6px;">${es.label}</span>`:''}</span></div><div><span class="col-label">Maturity</span><span class="val">${HOSPITAL_INSURANCE_PRODUCTS.includes(p.name) ? 'N/A — renews annually' : fmtDate(p.maturityDate)}</span></div><div><span class="col-label">Premium due</span><span class="val">${p.premiumFrequency==='Single Premium' ? 'N/A' : fmtDate(p.premiumDueDate)} ${ps?`<span class="badge ${ps.cls}" style="margin-left:6px;">${ps.label}</span>`:''}</span></div></div><div class="policy-foot"><div><span class="premium-amt">${p.premiumAmount ? 'S$ '+Number(p.premiumAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</span><span class="premium-freq"> / ${esc(p.premiumFrequency||'—')}</span>${paymentMethodList(p).length ? `<span class="premium-freq"> · via ${esc(formatPaymentMethods(p))}</span>` : ''}${p.lastPaidDate ? `<span class="premium-freq"> · last paid ${fmtDate(p.lastPaidDate)}</span>` : ''}</div><div style="display:flex;gap:8px;">${p.premiumFrequency!=='Single Premium' && p.premiumDueDate ? `<button class="btn btn-ghost btn-sm" data-action="mark-paid" data-client="${c.id}" data-policy="${p.id}">${icon('check')} Mark premium paid</button>` : ''}</div></div></div>`;
+  return `<div class="policy-card" style="border-left-color:${catColor(p.category)}"><div class="policy-top"><div><div class="policy-title">${esc(p.name)}</div><div class="policy-insurer">${esc(p.insurer||'—')} ${p.policyNumber ? '· '+esc(p.policyNumber) : ''}</div></div><div class="policy-actions"><span class="badge ${statusCls}">${esc(status)}</span><span class="badge neutral" style="background:${catColor(p.category)}22;color:${catColor(p.category)};">${esc(p.category||'Uncategorised')}</span><button class="icon-btn" data-action="open-policy-form" data-client="${c.id}" data-policy="${p.id}" title="Edit">${icon('edit')}</button><button class="icon-btn" data-action="delete-policy" data-client="${c.id}" data-policy="${p.id}" title="Delete">${icon('trash')}</button></div></div><div class="policy-dates"><div><span class="col-label">Inception</span><span class="val">${fmtDate(p.inceptionDate)}</span></div><div><span class="col-label">Expiry</span><span class="val">${fmtDate(p.expiryDate)} ${es?`<span class="badge ${es.cls}" style="margin-left:6px;">${es.label}</span>`:''}</span></div><div><span class="col-label">Maturity</span><span class="val">${HOSPITAL_INSURANCE_PRODUCTS.includes(p.name) ? 'N/A — renews annually' : fmtDate(p.maturityDate)}</span></div><div><span class="col-label">Premium due</span><span class="val">${p.premiumFrequency==='Single Premium' ? 'N/A' : fmtDate(p.premiumDueDate)} ${ps?`<span class="badge ${ps.cls}" style="margin-left:6px;">${ps.label}</span>`:''}</span></div></div><div class="policy-foot"><div><span class="premium-amt">${p.premiumAmount ? 'S$ '+Number(p.premiumAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</span><span class="premium-freq"> / ${esc(p.premiumFrequency||'—')}</span>${paymentMethodList(p).length ? `<span class="premium-freq"> · via ${esc(formatPaymentMethods(p))}</span>` : ''}${p.lastPaidDate ? `<span class="premium-freq"> · last paid ${fmtDate(p.lastPaidDate)}</span>` : ''}</div><div style="display:flex;gap:8px;">${p.premiumFrequency!=='Single Premium' && p.premiumDueDate ? `<button class="btn btn-ghost btn-sm" data-action="mark-paid" data-client="${c.id}" data-policy="${p.id}">${icon('check')} Mark premium paid</button>` : ''}</div></div>${isPulsarPolicy(p) && p.partialWithdrawalDate ? `<div style="margin-top:10px;padding:10px 14px;background:var(--amber-soft);border-radius:8px;font-size:13px;"><span style="font-weight:700;color:var(--amber);">Partial Withdrawal Planned</span> · S$ ${Number(p.partialWithdrawalAmount||0).toLocaleString(undefined,{minimumFractionDigits:2})} on ${fmtDate(p.partialWithdrawalDate)}${p.partialWithdrawalPurpose ? ' · '+esc(p.partialWithdrawalPurpose) : ''}<br><span style="color:var(--ink-soft);font-size:12px;">Submit form by ${fmtDate(new Date(new Date(p.partialWithdrawalDate+'T00:00:00').getTime()-30*86400000).toISOString().slice(0,10))} · 5–7 working days processing</span></div>` : ''}</div>`;
 }
 
 /* ============================== SETTINGS ============================== */
@@ -920,6 +945,15 @@ function openPolicyForm(clientId, policyId){
         <div class="form-group"><label>Premium amount (S$)</label><input type="number" step="0.01" name="premiumAmount" id="premiumAmountInput" value="${p?.premiumAmount||''}"><span class="hint" id="premiumAmountHint">Auto-totals from payment methods, if entered</span></div>
         <div class="form-group"><label>Sum assured (S$)</label><input type="number" step="0.01" name="sumAssured" value="${p?.sumAssured||''}"></div>
         <div class="form-group span2"><label>Notes</label><textarea name="notes">${esc(p?.notes||'')}</textarea></div>
+        <div id="pulsarSection" class="form-group span2" style="display:none;border-top:2px solid var(--amber-soft);padding-top:14px;margin-top:4px;">
+          <div style="background:var(--amber-soft);border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+            <div style="font-weight:700;color:var(--amber);font-size:13.5px;margin-bottom:4px;">Partial Withdrawal Planning</div>
+            <div style="font-size:12.5px;color:var(--ink-soft);">A reminder will appear on the dashboard 1 month before the intended date, prompting you to submit the withdrawal form. Allow <strong>5–7 working days</strong> for processing. Advise client to <strong>not spend</strong> this amount before the withdrawal is received.</div>
+          </div>
+        </div>
+        <div id="pulsarAmountWrap" class="form-group" style="display:none;"><label>Partial withdrawal amount (S$)</label><input type="number" step="0.01" name="partialWithdrawalAmount" id="partialWithdrawalAmountInput" placeholder="e.g. 5000" value="${esc(p?.partialWithdrawalAmount||'')}"></div>
+        <div id="pulsarDateWrap" class="form-group" style="display:none;"><label>Intended withdrawal date</label><input type="text" name="partialWithdrawalDate" id="partialWithdrawalDateInput" placeholder="e.g. 15 Sep 2026" value="${p?.partialWithdrawalDate ? fmtDate(p.partialWithdrawalDate) : ''}"><span class="hint" id="partialWithdrawalDateHint"></span></div>
+        <div id="pulsarPurposeWrap" class="form-group span2" style="display:none;"><label>Purpose / instructions for client</label><input type="text" name="partialWithdrawalPurpose" placeholder="e.g. School fees in Jan 2027 — do not spend before withdrawal received" value="${esc(p?.partialWithdrawalPurpose||'')}"><span class="hint">Shown on reminders to keep both you and the client accountable.</span></div>
       </div>
       <div class="modal-foot"><button type="button" class="btn btn-ghost" data-action="close-modal">Cancel</button><button type="button" id="policyFormSaveBtn" class="btn btn-accent">${p?'Save changes':'Add policy'}</button></div>
     </form>
@@ -930,12 +964,20 @@ function openPolicyForm(clientId, policyId){
   const productPicker = document.getElementById('productPicker');
   const productDesc = document.getElementById('productDesc');
   const toggleMaturity = () => { const isHospitalPlan = HOSPITAL_INSURANCE_PRODUCTS.includes(nameInput.value.trim()); document.getElementById('maturityDateWrap').style.display = isHospitalPlan ? 'none' : ''; document.getElementById('maturityDateNote').style.display = isHospitalPlan ? '' : 'none'; if(isHospitalPlan){ document.getElementById('maturityDateInput').value = ''; document.getElementById('maturityDateInputHint').textContent = ''; } };
-  nameInput.addEventListener('input', toggleMaturity); toggleMaturity();
+  const togglePulsar = () => {
+    const show = isPulsarPolicy({ name: nameInput.value });
+    ['pulsarSection','pulsarAmountWrap','pulsarDateWrap','pulsarPurposeWrap'].forEach(id => {
+      document.getElementById(id).style.display = show ? '' : 'none';
+    });
+    if(show) wireFlexDateInput('partialWithdrawalDateInput', 'partialWithdrawalDateHint');
+  };
+  nameInput.addEventListener('input', () => { toggleMaturity(); togglePulsar(); });
+  toggleMaturity(); togglePulsar();
   productPicker.addEventListener('change', () => {
     const val = productPicker.value;
     if(val === '__custom__'){ productDesc.textContent = 'Type the product name and pick a category below.'; nameInput.focus(); }
     else if(val === ''){ productDesc.textContent = ''; }
-    else { const [cat, prodName] = val.split('|||'); const entry = PRODUCT_CATALOG.find(pr => pr.category === cat && pr.name === prodName); nameInput.value = prodName; if([...categorySelect.options].some(o => o.value === cat)) categorySelect.value = cat; insurerSelect.value = 'Income Insurance'; productDesc.textContent = entry?.desc || ''; toggleMaturity(); }
+    else { const [cat, prodName] = val.split('|||'); const entry = PRODUCT_CATALOG.find(pr => pr.category === cat && pr.name === prodName); nameInput.value = prodName; if([...categorySelect.options].some(o => o.value === cat)) categorySelect.value = cat; insurerSelect.value = 'Income Insurance'; productDesc.textContent = entry?.desc || ''; toggleMaturity(); togglePulsar(); }
   });
   if(p){ const match = PRODUCT_CATALOG.find(pr => pr.name === p.name); if(match){ productPicker.value = match.category + '|||' + match.name; productDesc.textContent = match.desc || ''; } }
   const freqSel = document.getElementById('premFreq');
@@ -974,6 +1016,15 @@ async function submitPolicyForm(){
     if(inception.unrecognised) unrecognisedDates.push('Inception date'); if(expiry.unrecognised) unrecognisedDates.push('Expiry date'); if(maturity.unrecognised) unrecognisedDates.push('Maturity date'); if(premDue.unrecognised) unrecognisedDates.push('Premium due date');
     const selectedPaymentMethods = f.getAll('paymentMethod').map(m => ({ method: m, amount: f.get('pmAmount__' + m) || '' }));
     const data = { name: (f.get('name')||'').trim(), category, insurer, policyNumber: (f.get('policyNumber')||'').trim(), status: f.get('status')||'In Force', inceptionDate: inception.iso, expiryDate: expiry.iso, maturityDate: maturity.iso, paymentMethod: selectedPaymentMethods, premiumFrequency: f.get('premiumFrequency')||'Monthly', premiumDueDate: premDue.iso, premiumAmount: f.get('premiumAmount')||'', sumAssured: f.get('sumAssured')||'', notes: (f.get('notes')||'').trim() };
+    if(isPulsarPolicy(data)){
+      const pwDate = parseDateField(f.get('partialWithdrawalDate'));
+      if(pwDate.unrecognised) unrecognisedDates.push('Partial withdrawal date');
+      data.partialWithdrawalAmount = f.get('partialWithdrawalAmount') || '';
+      data.partialWithdrawalDate = pwDate.iso;
+      data.partialWithdrawalPurpose = (f.get('partialWithdrawalPurpose') || '').trim();
+    } else {
+      data.partialWithdrawalAmount = ''; data.partialWithdrawalDate = ''; data.partialWithdrawalPurpose = '';
+    }
     if(!data.name){ toast('Please fill in the required field: Policy / product name.', 'danger'); const nameInput = document.getElementById('policyNameInput'); if(nameInput){ nameInput.style.borderColor = 'var(--red)'; nameInput.focus(); nameInput.addEventListener('input', () => { nameInput.style.borderColor = ''; }, { once: true }); } return; }
     c.policies = c.policies || [];
     if(policyId){ const p = c.policies.find(x=>x.id===policyId); Object.assign(p, data); }
