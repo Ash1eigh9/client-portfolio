@@ -1287,15 +1287,19 @@ function renderInvestmentDetail(main){
 
 /* ============================== INVESTMENTS — CSV IMPORT ============================== */
 function parseCSV(text){
-  const lines = text.trim().split(/\r?\n/).filter(function(l){ return l.trim(); });
-  if(lines.length < 2) return [];
-  const headers = splitCSVRow(lines[0]).map(function(h){ return h.trim().toLowerCase().replace(/[^a-z0-9 %]/g,''); });
-  return lines.slice(1).map(function(line){
+  // strip BOM and normalise line endings
+  text = text.replace(/^﻿/, '').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const lines = text.split('\n').filter(function(l){ return l.trim(); });
+  if(lines.length < 2) return { headers:[], rows:[] };
+  const rawHeaders = splitCSVRow(lines[0]);
+  const headers = rawHeaders.map(function(h){ return h.trim().toLowerCase().replace(/[^a-z0-9 %.]/g,' ').replace(/\s+/g,' ').trim(); });
+  const rows = lines.slice(1).map(function(line){
     const vals = splitCSVRow(line);
     const row = {};
-    headers.forEach(function(h, i){ row[h] = (vals[i]||'').trim(); });
+    headers.forEach(function(h, i){ row[h] = (vals[i]||'').replace(/^"|"$/g,'').trim(); });
     return row;
   });
+  return { headers: headers, rows: rows };
 }
 function splitCSVRow(line){
   const result = []; let inQuote = false, cur = '';
@@ -1306,6 +1310,14 @@ function splitCSVRow(line){
     else { cur += ch; }
   }
   result.push(cur); return result;
+}
+// find a value from a row trying multiple possible column name aliases
+function col(row, aliases){
+  for(var i=0;i<aliases.length;i++){
+    const v = row[aliases[i]];
+    if(v !== undefined && v !== '') return v;
+  }
+  return '';
 }
 function downloadCSVTemplate(type){
   var content, filename;
@@ -1348,8 +1360,15 @@ function openImportCSV(invId){
     +'</div>');
   document.getElementById('dlHoldingsBtn').onclick = function(){ downloadCSVTemplate('holdings'); };
   document.getElementById('dlTxBtn').onclick = function(){ downloadCSVTemplate('transactions'); };
-  document.getElementById('csvFileInput').addEventListener('change', function(){
-    document.getElementById('importStatus').textContent = this.files[0] ? '✓ Ready: '+this.files[0].name : '';
+  document.getElementById('csvFileInput').addEventListener('change', async function(){
+    const statusEl = document.getElementById('importStatus');
+    if(!this.files[0]){ statusEl.innerHTML = ''; return; }
+    try{
+      const text = await this.files[0].text();
+      const parsed = parseCSV(text);
+      if(!parsed.headers.length){ statusEl.innerHTML = '<span style="color:var(--red);">Could not detect column headers.</span>'; return; }
+      statusEl.innerHTML = '<strong>Detected columns:</strong> <span style="color:var(--ink-faint);">'+parsed.headers.map(function(h){ return '"'+h+'"'; }).join(', ')+'</span><br><span style="color:var(--ink-faint);">'+parsed.rows.length+' data rows</span>';
+    }catch(e){ statusEl.innerHTML = '<span style="color:var(--red);">'+e.message+'</span>'; }
   });
   document.getElementById('doImportBtn').onclick = async function(){
     const file = document.getElementById('csvFileInput').files[0];
@@ -1358,28 +1377,29 @@ function openImportCSV(invId){
     const importType = document.getElementById('importType').value;
     let text;
     try{ text = await file.text(); }catch(e){ statusEl.textContent = 'Could not read file: '+e.message; return; }
-    const rows = parseCSV(text);
-    if(!rows.length){ statusEl.textContent = 'No data rows found — check your file matches the template headers.'; return; }
+    const parsed = parseCSV(text);
+    const rows = parsed.rows;
+    if(!rows.length){ statusEl.innerHTML = 'No data rows found.<br><small>Detected columns: '+parsed.headers.join(', ')+'</small>'; return; }
     let added = 0, updated = 0, skipped = 0;
     if(importType === 'holdings'){
       if(!inv.funds) inv.funds = [];
       rows.forEach(function(r){
-        const name = r['fund name'] || r['fund'] || '';
-        const isin = (r['isin']||'').toUpperCase();
+        const name = col(r,['fund name','fund','fund description','description','sub fund','fund title']);
+        const isin = col(r,['isin','isin code','fund code']).toUpperCase();
         if(!name){ skipped++; return; }
         const existing = inv.funds.find(function(f){ return (isin && f.isin && f.isin===isin) || f.name.toLowerCase()===name.toLowerCase(); });
-        const units = parseFloat(r['units']);
-        const purchaseNav = parseFloat(r['purchase nav']||r['purchasenav']||r['purchase_nav']||r['nav']);
-        if(!units && !existing){ skipped++; return; }
+        const units = parseFloat(col(r,['units','unit','quantity','no of units','number of units','units held']).replace(/,/g,''));
+        const purchaseNav = parseFloat(col(r,['purchase nav','purchasenav','nav at purchase','cost nav','purchase price','average cost','ave cost']).replace(/,/g,''));
+        if(isNaN(units) && !existing){ skipped++; return; }
         const fdata = {
           id: existing ? existing.id : uid(),
           name: name,
           isin: isin || (existing ? existing.isin||'' : ''),
-          currency: r['currency'] || (existing ? existing.currency||'USD' : 'USD'),
+          currency: col(r,['currency','ccy','fund currency']) || (existing ? existing.currency||'USD' : 'USD'),
           units: isNaN(units) ? (existing ? existing.units : 0) : units,
           purchaseNav: isNaN(purchaseNav) ? (existing ? existing.purchaseNav : 0) : purchaseNav,
-          latestNav: parseFloat(r['latest nav']||r['latestnav']||r['latest_nav']) || (existing ? existing.latestNav||null : null),
-          allocationPct: parseFloat(r['allocation %']||r['allocation']||r['allocationpct']) || (existing ? existing.allocationPct||null : null),
+          latestNav: parseFloat(col(r,['latest nav','latestnav','current nav','nav','unit price','bid price','offer price']).replace(/,/g,'')) || (existing ? existing.latestNav||null : null),
+          allocationPct: parseFloat(col(r,['allocation %','allocation','allocationpct','alloc %','alloc','weight %','weight']).replace(/,/g,'')) || (existing ? existing.allocationPct||null : null),
           navDate: existing ? existing.navDate||null : null,
           navName: existing ? existing.navName||null : null,
         };
@@ -1389,17 +1409,18 @@ function openImportCSV(invId){
     } else {
       if(!inv.transactions) inv.transactions = [];
       rows.forEach(function(r){
-        const date = r['date']||'';
-        const fundName = r['fund name']||r['fund']||'';
-        const txType = r['type']||'';
-        if(!date||!fundName||!txType){ skipped++; return; }
+        const date = col(r,['date','transaction date','trans date','value date','effective date','trade date','process date']);
+        const fundName = col(r,['fund name','fund','fund description','description','sub fund','fund title']);
+        const txType = col(r,['type','transaction type','trans type','transaction','activity','trans. type','activity type']);
+        if(!date || !fundName){ skipped++; return; }
+        const units = parseFloat(col(r,['units','unit','quantity','no of units','units transacted','debit units','credit units']).replace(/,/g,''))||0;
+        const price = parseFloat(col(r,['price per unit','price','unit price','nav','nav price','bid price','offer price','bid nav','offer nav']).replace(/,/g,''))||0;
+        const amount = parseFloat(col(r,['amount','amount sgd','amount (sgd)','sgd amount','gross amount','net amount','value','consideration']).replace(/,/g,''))||0;
         inv.transactions.push({
           id: uid(), date: date, fundName: fundName,
-          isin: (r['isin']||'').toUpperCase(),
-          type: txType,
-          units: parseFloat(r['units'])||0,
-          price: parseFloat(r['price per unit']||r['price']||r['nav']||r['price per unit'])||0,
-          amount: parseFloat(r['amount sgd']||r['amount (sgd)']||r['amount'])||0,
+          isin: col(r,['isin','isin code','fund code']).toUpperCase(),
+          type: txType || 'Transaction',
+          units: units, price: price, amount: amount,
         });
         added++;
       });
