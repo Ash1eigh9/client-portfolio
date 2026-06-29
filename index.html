@@ -1122,6 +1122,35 @@ async function deleteOneInvestment(id){
 }
 
 /* ============================== INVESTMENTS — NAV REFRESH ============================== */
+async function fetchFxRates(){
+  // open.er-api.com is free, CORS-enabled, no key needed — returns rates vs SGD base
+  try{
+    const r = await fetch('https://open.er-api.com/v6/latest/SGD');
+    if(!r.ok) return null;
+    const j = await r.json();
+    return j.result === 'success' ? j.rates : null;
+  }catch(e){ return null; }
+}
+
+function computeAutoCashValue(inv, fxRates){
+  // Sum: netUnits × latestNAV in fund ccy → SGD via live FX
+  // fxRates is keyed by currency code, values are "units of that ccy per 1 SGD"
+  // e.g. fxRates.USD = 0.74 means 1 SGD = 0.74 USD, so 1 USD = 1/0.74 SGD
+  if(!fxRates || !inv.funds || !inv.funds.length) return null;
+  let total = 0; let hasVal = false;
+  (inv.funds||[]).forEach(function(f){
+    const units = Number(f.units||0);
+    const nav   = Number(f.latestNav||0);
+    const ccy   = (f.currency||'SGD').toUpperCase();
+    if(!units || !nav) return;
+    const rate = ccy === 'SGD' ? 1 : (fxRates[ccy] ? 1 / fxRates[ccy] : null);
+    if(rate === null) return;
+    total += units * nav * rate;
+    hasVal = true;
+  });
+  return hasVal ? parseFloat(total.toFixed(2)) : null;
+}
+
 async function refreshPrices(invId, silent){
   const inv = investments.find(i => i.id === invId);
   if(!inv || !inv.funds || !inv.funds.length) return;
@@ -1130,9 +1159,12 @@ async function refreshPrices(invId, silent){
   const btn = document.querySelector(`[data-action="refresh-prices"][data-id="${invId}"]`);
   if(btn) btn.querySelector('svg')?.classList.add('spinning');
   try{
-    const res = await fetch(`${WORKER_URL}?symbols=${symbols.join(',')}`);
-    if(!res.ok) throw new Error('Worker HTTP ' + res.status);
-    const json = await res.json();
+    const [navRes, fxRates] = await Promise.all([
+      fetch(`${WORKER_URL}?symbols=${symbols.join(',')}`),
+      fetchFxRates()
+    ]);
+    if(!navRes.ok) throw new Error('Worker HTTP ' + navRes.status);
+    const json = await navRes.json();
     if(!json.ok) throw new Error(json.error || 'Worker error');
     inv.funds.forEach(f => {
       const sym = `${f.isin}:${f.currency}`;
@@ -1140,8 +1172,17 @@ async function refreshPrices(invId, silent){
       if(d && d.price){ f.latestNav = d.price; f.navDate = d.priceDate; f.navName = d.name; }
     });
     inv.lastRefreshed = new Date().toISOString();
+    // auto-compute cash value — only overwrite if user hasn't manually set it
+    if(inv.cashValueSource !== 'manual'){
+      const auto = computeAutoCashValue(inv, fxRates);
+      if(auto !== null){
+        inv.cashValue = auto;
+        inv.cashValueDate = new Date().toISOString().slice(0,10);
+        inv.cashValueSource = 'auto';
+      }
+    }
     await saveOneInvestment(inv);
-    if(!silent) toast('Prices updated.');
+    if(!silent) toast('Prices and cash value updated.');
     if(view.type === 'investments' || view.type === 'investment-detail') render();
   }catch(e){
     if(!silent) toast('Refresh failed: ' + e.message, 'danger');
@@ -1211,13 +1252,13 @@ function investmentCard(inv){
     +'<div><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">'+(premiumsSGD>0?'Premiums Paid':'Invested')+'</div><div style="font-size:16px;font-weight:700;">SGD '+fmtMoney(displayInvested)+'</div></div>'
     +(displayAccountVal > 0
       ? '<div><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Account Value (SGD)</div><div style="font-size:16px;font-weight:700;">SGD '+fmtMoney(displayAccountVal)+'</div>'
-        +(Number(inv.cashValue||0) > 0 ? '<div style="font-size:10px;color:var(--ink-faint);">from portal'+( inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '')+'</div>' : '')+'</div>'
+        +(Number(inv.cashValue||0) > 0 ? '<div style="font-size:10px;color:var(--ink-faint);">'+(inv.cashValueSource==='manual'?'manual override':' auto · live FX')+(inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '')+'</div>' : '')+'</div>'
         +(gainSGDCard !== null ? '<div><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Gain / Loss</div><div style="font-size:16px;font-weight:700;" class="'+perfClass(gainSGDCard)+'">'+(gainSGDCard>=0?'+':'')+fmtMoney(gainSGDCard)+'<br><small>'+fmtPct(gainSGDPctCard)+'</small></div></div>' : '')
       : '')
     +'</div>'
     +(Number(inv.cashValue||0) > 0
-      ? '<div style="font-size:11px;color:var(--ink-faint);margin-top:8px;">Cash value from HSBC portal'+(inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '')+'</div>'
-      : inv.lastRefreshed ? '<div style="font-size:11px;color:var(--ink-faint);margin-top:8px;">NAV refreshed: '+new Date(inv.lastRefreshed).toLocaleString('en-SG')+'</div>' : '<div style="font-size:11px;color:var(--amber);margin-top:8px;">Enter cash value from HSBC portal for accuracy</div>')
+      ? '<div style="font-size:11px;color:var(--ink-faint);margin-top:8px;">'+(inv.cashValueSource==='manual'?'Manual override from HSBC portal':'Auto-calculated · units × NAV × live FX')+(inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '')+'</div>'
+      : inv.lastRefreshed ? '<div style="font-size:11px;color:var(--ink-faint);margin-top:8px;">NAV refreshed: '+new Date(inv.lastRefreshed).toLocaleString('en-SG')+'</div>' : '<div style="font-size:11px;color:var(--amber);margin-top:8px;">Refresh NAV to auto-calculate cash value</div>')
     +'</div>';
 }
 
@@ -1334,7 +1375,7 @@ function renderInvestmentDetail(main){
       : '<div style="font-size:14px;color:var(--ink-faint);margin-top:6px;">—</div><div style="font-size:11px;color:var(--amber);margin-top:2px;">Edit portfolio to link a policy</div>')
     +'</div>'
     +(displayCashVal > 0
-      ? '<div class="card" style="padding:16px 20px;min-width:160px;border:1px solid var(--line);"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Account Value (SGD)</div><div style="font-size:22px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(displayCashVal)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">'+(Number(inv.cashValue||0) > 0 ? 'From HSBC portal'+(inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '') : (hasAnyNav ? 'Based on latest NAV' : 'NAV at purchase — refresh to update'))+'</div></div>'
+      ? '<div class="card" style="padding:16px 20px;min-width:160px;border:1px solid var(--line);"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Account Value (SGD)</div><div style="font-size:22px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(displayCashVal)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">'+(Number(inv.cashValue||0) > 0 ? (inv.cashValueSource==='manual' ? 'Manual — from HSBC portal' : 'Auto · units × NAV × live FX')+(inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '') : (hasAnyNav ? 'Based on latest NAV' : 'Refresh NAV to calculate'))+'</div></div>'
       : '')
     +(displayCashVal > 0 && premiumsDisplay
       ? '<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Overall Gain / Loss (SGD)</div><div style="font-size:22px;font-weight:700;margin-top:4px;" class="'+perfClass(gainSGD)+'">'+(gainSGD>=0?'+':'')+fmtMoney(gainSGD)+'</div><div style="font-size:13px;margin-top:2px;" class="'+perfClass(gainSGD)+'">'+fmtPct(gainSGDPct)+'</div></div>'
@@ -1659,9 +1700,13 @@ function openInvestmentForm(id){
     +'<div id="invPremCalc" style="font-size:12px;color:var(--ink-faint);margin-top:5px;min-height:16px;"></div></label>'
     +'<label style="margin-top:12px;">HSBC ILP Product<select name="product" required style="margin-top:4px;">'+productOpts+'</select></label>'
     +'<label style="margin-top:12px;">Policy Number <span style="font-size:11px;color:var(--ink-faint);">(auto-filled from policy)</span><input name="policyNo" id="invPolicyNo" value="'+esc(inv ? inv.policyNo||'' : '')+'" placeholder="e.g. P12345678"></label>'
-    +'<div style="display:flex;gap:10px;margin-top:12px;">'
-    +'<label style="flex:1;">Cash Value (SGD) <span style="font-size:11px;color:var(--ink-faint);">from HSBC portal</span><input name="cashValue" type="number" step="0.01" min="0" value="'+esc(inv && inv.cashValue ? String(inv.cashValue) : '')+'" placeholder="e.g. 42517.76"></label>'
-    +'<label style="flex:1;">As of Date<input name="cashValueDate" type="date" value="'+esc(inv && inv.cashValueDate ? inv.cashValueDate : '')+'"></label>'
+    +'<div style="margin-top:14px;padding:12px;background:var(--surface);border-radius:8px;border:1px solid var(--line);">'
+    +'<div style="font-size:12px;font-weight:600;margin-bottom:8px;">Cash Value (SGD) <span style="font-weight:400;color:var(--ink-faint);">— auto-calculated on NAV refresh · override if needed</span></div>'
+    +'<div style="display:flex;gap:10px;">'
+    +'<label style="flex:1;">Cash Value<input name="cashValue" type="number" step="0.01" min="0" value="'+esc(inv && inv.cashValue ? String(inv.cashValue) : '')+'" placeholder="auto" id="invCashVal"></label>'
+    +'<label style="flex:1;">As of Date<input name="cashValueDate" type="date" value="'+esc(inv && inv.cashValueDate ? inv.cashValueDate : '')+'" id="invCashValDate"></label>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--ink-faint);margin-top:6px;" id="invCashValNote">'+(inv && inv.cashValueSource === 'manual' ? '&#9998; Manual override — auto-refresh will not overwrite. <a href="#" id="resetCashAuto" style="color:var(--blue);">Reset to auto</a>' : (inv && inv.cashValueSource === 'auto' ? '&#x2713; Auto-calculated from NAV + live FX rates' : 'Will be calculated automatically on next NAV refresh.'))+'</div>'
     +'</div>'
     +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">'
     +'<button type="button" class="btn btn-sm" data-action="close-modal">Cancel</button>'
@@ -1688,13 +1733,22 @@ function openInvestmentForm(id){
   document.getElementById('invClientSel').addEventListener('change', function(){ refreshPolicyDropdown(this.value, ''); });
   document.getElementById('invPolicySel').addEventListener('change', function(){ refreshPremCalc(this.value); });
   if(autoLinkedId) refreshPremCalc(autoLinkedId, inv ? inv.clientId : '');
+  var _resetLink = document.getElementById('resetCashAuto');
+  if(_resetLink) _resetLink.addEventListener('click', function(e){
+    e.preventDefault();
+    document.getElementById('invCashVal').value = '';
+    document.getElementById('invCashValDate').value = '';
+    document.getElementById('invCashValNote').innerHTML = 'Will be recalculated automatically on next NAV refresh.';
+  });
 
   document.getElementById('invForm').addEventListener('submit', async function(e){
     e.preventDefault();
     const fd = new FormData(e.target);
     const linkedPolicyId = fd.get('linkedPolicyId')||'';
     const rawCV = fd.get('cashValue'); const cvNum = rawCV ? parseFloat(rawCV) : 0;
-    const fields = { clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), linkedPolicyId: linkedPolicyId, cashValue: cvNum||0, cashValueDate: fd.get('cashValueDate')||'' };
+    const prevCV = inv ? Number(inv.cashValue||0) : 0;
+    const cvSource = cvNum && cvNum !== prevCV ? 'manual' : (inv ? (inv.cashValueSource||'auto') : 'auto');
+    const fields = { clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), linkedPolicyId: linkedPolicyId, cashValue: cvNum||0, cashValueDate: fd.get('cashValueDate')||'', cashValueSource: cvSource };
     if(inv){
       Object.assign(inv, fields);
       await saveOneInvestment(inv);
