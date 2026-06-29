@@ -1213,6 +1213,7 @@ function renderInvestmentDetail(main){
   const inv = investments.find(function(i){ return i.id === view.invId; });
   if(!inv){ view = { type:'investments' }; render(); return; }
   const funds = inv.funds || [];
+  const txns  = (inv.transactions || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
   const clientName = (clients.find(function(c){ return c.id === inv.clientId; }) || {}).name || inv.clientId || '—';
   var totalInvested = 0, totalValue = 0;
   const rows = funds.map(function(f){
@@ -1223,6 +1224,7 @@ function renderInvestmentDetail(main){
     totalInvested += cost; totalValue += val;
     return '<tr>'
       +'<td>'+esc(f.name)+'<br><span style="font-size:11px;color:var(--ink-faint);">'+esc(f.isin||'')+'</span></td>'
+      +'<td style="text-align:right;">'+(f.allocationPct ? esc(f.allocationPct)+'%' : '—')+'</td>'
       +'<td style="text-align:right;">'+fmtMoney(f.units,4)+'</td>'
       +'<td style="text-align:right;">'+fmtMoney(f.purchaseNav,4)+'</td>'
       +'<td style="text-align:right;">'+(f.latestNav ? fmtMoney(f.latestNav,4) : '<span style="color:var(--ink-faint);">—</span>')+'</td>'
@@ -1235,11 +1237,24 @@ function renderInvestmentDetail(main){
   }).join('');
   const totalGain = totalValue - totalInvested;
   const totalPct  = totalInvested ? (totalGain / totalInvested * 100) : null;
+  const txRows = txns.map(function(t){
+    const typeColor = t.type==='Top-up'||t.type==='Switch In' ? 'var(--green)' : t.type==='Switch Out'||t.type==='Partial Withdrawal' ? 'var(--red)' : 'var(--ink)';
+    return '<tr>'
+      +'<td>'+esc(t.date)+'</td>'
+      +'<td>'+esc(t.fundName)+'<br><span style="font-size:11px;color:var(--ink-faint);">'+esc(t.isin||'')+'</span></td>'
+      +'<td><span style="color:'+typeColor+';font-weight:600;">'+esc(t.type)+'</span></td>'
+      +'<td style="text-align:right;">'+fmtMoney(t.units,4)+'</td>'
+      +'<td style="text-align:right;">'+fmtMoney(t.price,4)+'</td>'
+      +'<td style="text-align:right;">'+(t.amount ? esc(inv.currency||'SGD')+' '+fmtMoney(t.amount) : '—')+'</td>'
+      +'<td style="text-align:right;"><button class="btn btn-sm" style="color:var(--red);" data-action="delete-transaction" data-inv="'+esc(inv.id)+'" data-tx="'+esc(t.id)+'" title="Remove">'+icon('trash')+'</button></td>'
+      +'</tr>';
+  }).join('');
   main.innerHTML = '<div class="content">'
     +'<div class="page-header">'
     +'<button class="btn btn-sm" data-action="nav" data-view="investments">'+icon('back')+' Portfolios</button>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
     +'<button class="btn btn-sm" data-action="refresh-prices" data-id="'+esc(inv.id)+'">'+icon('refresh')+' Refresh NAV</button>'
+    +'<button class="btn btn-sm" data-action="open-import-csv" data-id="'+esc(inv.id)+'">&#x2B06; Import CSV</button>'
     +'<button class="btn btn-sm" data-action="open-fund-form" data-inv="'+esc(inv.id)+'">'+icon('plus')+' Add Fund</button>'
     +'<button class="btn btn-sm" data-action="open-investment-form" data-id="'+esc(inv.id)+'">'+icon('edit')+' Edit</button>'
     +'<button class="btn btn-sm" style="color:var(--red);" data-action="delete-investment" data-id="'+esc(inv.id)+'">'+icon('trash')+' Delete</button>'
@@ -1251,15 +1266,158 @@ function renderInvestmentDetail(main){
     +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Current Value</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalValue)+'</div></div>'
     +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Total Gain / Loss</div><div style="font-size:20px;font-weight:700;margin-top:4px;" class="'+perfClass(totalGain)+'">'+(totalGain>=0?'+':'')+fmtMoney(totalGain)+'<br><small style="font-size:13px;">'+fmtPct(totalPct)+'</small></div></div>'
     +'</div>'
+    +'<h3 style="margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);">Fund Holdings</h3>'
     +(funds.length === 0
-      ? '<div class="empty-state"><p>No funds added yet. Click <strong>Add Fund</strong>.</p></div>'
-      : '<div style="overflow-x:auto;"><table class="fund-table">'
-        +'<thead><tr><th>Fund Name / ISIN</th><th style="text-align:right;">Units</th><th style="text-align:right;">Purchase NAV</th><th style="text-align:right;">Latest NAV</th><th style="text-align:right;">Cost</th><th style="text-align:right;">Gain / Loss</th><th style="text-align:right;">Actions</th></tr></thead>'
+      ? '<div class="empty-state" style="margin-bottom:24px;"><p>No funds yet. Use <strong>Import CSV</strong> or <strong>Add Fund</strong>.</p></div>'
+      : '<div style="overflow-x:auto;margin-bottom:28px;"><table class="fund-table">'
+        +'<thead><tr><th>Fund Name / ISIN</th><th style="text-align:right;">Alloc %</th><th style="text-align:right;">Units</th><th style="text-align:right;">Purchase NAV</th><th style="text-align:right;">Latest NAV</th><th style="text-align:right;">Cost</th><th style="text-align:right;">Gain / Loss</th><th style="text-align:right;">Actions</th></tr></thead>'
         +'<tbody>'+rows+'</tbody>'
-        +'<tfoot><tr><td colspan="4">Total</td><td style="text-align:right;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalInvested)+'</td><td style="text-align:right;" class="'+perfClass(totalGain)+'">'+esc(inv.currency||'SGD')+' '+(totalGain>=0?'+':'')+fmtMoney(totalGain)+' ('+fmtPct(totalPct)+')</td><td></td></tr></tfoot>'
+        +'<tfoot><tr><td colspan="5">Total</td><td style="text-align:right;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalInvested)+'</td><td style="text-align:right;" class="'+perfClass(totalGain)+'">'+esc(inv.currency||'SGD')+' '+(totalGain>=0?'+':'')+fmtMoney(totalGain)+' ('+fmtPct(totalPct)+')</td><td></td></tr></tfoot>'
         +'</table></div>')
-    +(inv.lastRefreshed ? '<div style="font-size:11px;color:var(--ink-faint);margin-top:10px;">Prices last refreshed: '+new Date(inv.lastRefreshed).toLocaleString('en-SG')+'</div>' : '')
+    +'<h3 style="margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);">Transactions</h3>'
+    +(txns.length === 0
+      ? '<div class="empty-state"><p>No transactions yet. Use <strong>Import CSV</strong> to upload fund transaction history.</p></div>'
+      : '<div style="overflow-x:auto;"><table class="fund-table">'
+        +'<thead><tr><th>Date</th><th>Fund</th><th>Type</th><th style="text-align:right;">Units</th><th style="text-align:right;">Price / Unit</th><th style="text-align:right;">Amount</th><th></th></tr></thead>'
+        +'<tbody>'+txRows+'</tbody>'
+        +'</table></div>')
+    +(inv.lastRefreshed ? '<div style="font-size:11px;color:var(--ink-faint);margin-top:14px;">Prices last refreshed: '+new Date(inv.lastRefreshed).toLocaleString('en-SG')+'</div>' : '')
     +'</div>';
+}
+
+/* ============================== INVESTMENTS — CSV IMPORT ============================== */
+function parseCSV(text){
+  const lines = text.trim().split(/\r?\n/).filter(function(l){ return l.trim(); });
+  if(lines.length < 2) return [];
+  const headers = splitCSVRow(lines[0]).map(function(h){ return h.trim().toLowerCase().replace(/[^a-z0-9 %]/g,''); });
+  return lines.slice(1).map(function(line){
+    const vals = splitCSVRow(line);
+    const row = {};
+    headers.forEach(function(h, i){ row[h] = (vals[i]||'').trim(); });
+    return row;
+  });
+}
+function splitCSVRow(line){
+  const result = []; let inQuote = false, cur = '';
+  for(var i = 0; i < line.length; i++){
+    const ch = line[i];
+    if(ch === '"'){ inQuote = !inQuote; }
+    else if(ch === ',' && !inQuote){ result.push(cur); cur = ''; }
+    else { cur += ch; }
+  }
+  result.push(cur); return result;
+}
+function downloadCSVTemplate(type){
+  var content, filename;
+  if(type === 'holdings'){
+    content = 'Fund Name,ISIN,Currency,Units,Purchase NAV,Latest NAV,Allocation %\n'
+      +'Fidelity Global Technology,LU0095077415,USD,1500.5000,12.3456,,30\n'
+      +'Eastspring Asia Pacific Equity,LU0329590254,USD,800.0000,8.5000,,20\n';
+    filename = 'holdings_template.csv';
+  } else {
+    content = 'Date,Fund Name,ISIN,Type,Units,Price per Unit,Amount (SGD)\n'
+      +'2024-01-15,Fidelity Global Technology,LU0095077415,Top-up,100.0000,12.5000,1500.00\n'
+      +'2024-03-01,Fidelity Global Technology,LU0095077415,Switch Out,50.0000,13.0000,650.00\n'
+      +'2024-03-01,Eastspring Asia Pacific Equity,LU0329590254,Switch In,75.0000,8.6667,650.00\n';
+    filename = 'transactions_template.csv';
+  }
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(content);
+  a.download = filename; a.click();
+}
+function openImportCSV(invId){
+  const inv = investments.find(function(i){ return i.id === invId; });
+  if(!inv) return;
+  showModal('<div class="modal-header"><h3>Import CSV</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
+    +'<p style="color:var(--ink-faint);font-size:13px;margin:0 0 14px;">Download a template, fill it in Excel or Numbers, then upload the saved CSV here.</p>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">'
+    +'<button class="btn btn-sm" id="dlHoldingsBtn">&#x2B07; Holdings template</button>'
+    +'<button class="btn btn-sm" id="dlTxBtn">&#x2B07; Transactions template</button>'
+    +'</div>'
+    +'<label style="font-weight:600;margin-bottom:6px;display:block;">What are you importing?</label>'
+    +'<select id="importType" style="margin-bottom:14px;max-width:280px;">'
+    +'<option value="holdings">Fund Holdings (name, ISIN, units, NAV, allocation)</option>'
+    +'<option value="transactions">Fund Transactions (date, type, units, price)</option>'
+    +'</select>'
+    +'<label style="font-weight:600;margin-bottom:6px;display:block;">Select CSV file</label>'
+    +'<input type="file" id="csvFileInput" accept=".csv,.txt" style="margin-bottom:6px;">'
+    +'<div id="importStatus" style="font-size:12px;min-height:18px;margin-top:4px;"></div>'
+    +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">'
+    +'<button class="btn btn-sm" data-action="close-modal">Cancel</button>'
+    +'<button class="btn btn-primary" id="doImportBtn">Import</button>'
+    +'</div>');
+  document.getElementById('dlHoldingsBtn').onclick = function(){ downloadCSVTemplate('holdings'); };
+  document.getElementById('dlTxBtn').onclick = function(){ downloadCSVTemplate('transactions'); };
+  document.getElementById('csvFileInput').addEventListener('change', function(){
+    document.getElementById('importStatus').textContent = this.files[0] ? '✓ Ready: '+this.files[0].name : '';
+  });
+  document.getElementById('doImportBtn').onclick = async function(){
+    const file = document.getElementById('csvFileInput').files[0];
+    const statusEl = document.getElementById('importStatus');
+    if(!file){ statusEl.textContent = 'Please select a CSV file.'; return; }
+    const importType = document.getElementById('importType').value;
+    let text;
+    try{ text = await file.text(); }catch(e){ statusEl.textContent = 'Could not read file: '+e.message; return; }
+    const rows = parseCSV(text);
+    if(!rows.length){ statusEl.textContent = 'No data rows found — check your file matches the template headers.'; return; }
+    let added = 0, updated = 0, skipped = 0;
+    if(importType === 'holdings'){
+      if(!inv.funds) inv.funds = [];
+      rows.forEach(function(r){
+        const name = r['fund name'] || r['fund'] || '';
+        const isin = (r['isin']||'').toUpperCase();
+        if(!name){ skipped++; return; }
+        const existing = inv.funds.find(function(f){ return (isin && f.isin && f.isin===isin) || f.name.toLowerCase()===name.toLowerCase(); });
+        const units = parseFloat(r['units']);
+        const purchaseNav = parseFloat(r['purchase nav']||r['purchasenav']||r['purchase_nav']||r['nav']);
+        if(!units && !existing){ skipped++; return; }
+        const fdata = {
+          id: existing ? existing.id : uid(),
+          name: name,
+          isin: isin || (existing ? existing.isin||'' : ''),
+          currency: r['currency'] || (existing ? existing.currency||'USD' : 'USD'),
+          units: isNaN(units) ? (existing ? existing.units : 0) : units,
+          purchaseNav: isNaN(purchaseNav) ? (existing ? existing.purchaseNav : 0) : purchaseNav,
+          latestNav: parseFloat(r['latest nav']||r['latestnav']||r['latest_nav']) || (existing ? existing.latestNav||null : null),
+          allocationPct: parseFloat(r['allocation %']||r['allocation']||r['allocationpct']) || (existing ? existing.allocationPct||null : null),
+          navDate: existing ? existing.navDate||null : null,
+          navName: existing ? existing.navName||null : null,
+        };
+        if(existing){ const idx=inv.funds.findIndex(function(f){ return f.id===existing.id; }); inv.funds[idx]=fdata; updated++; }
+        else { inv.funds.push(fdata); added++; }
+      });
+    } else {
+      if(!inv.transactions) inv.transactions = [];
+      rows.forEach(function(r){
+        const date = r['date']||'';
+        const fundName = r['fund name']||r['fund']||'';
+        const txType = r['type']||'';
+        if(!date||!fundName||!txType){ skipped++; return; }
+        inv.transactions.push({
+          id: uid(), date: date, fundName: fundName,
+          isin: (r['isin']||'').toUpperCase(),
+          type: txType,
+          units: parseFloat(r['units'])||0,
+          price: parseFloat(r['price per unit']||r['price']||r['nav']||r['price per unit'])||0,
+          amount: parseFloat(r['amount sgd']||r['amount (sgd)']||r['amount'])||0,
+        });
+        added++;
+      });
+      inv.transactions.sort(function(a,b){ return b.date.localeCompare(a.date); });
+    }
+    await saveOneInvestment(inv);
+    closeModal();
+    if(view.type==='investment-detail') render();
+    toast('Imported: '+added+' added'+(updated?' / '+updated+' updated':'')+(skipped?' / '+skipped+' skipped':'')+'.') ;
+  };
+}
+async function deleteTransaction(invId, txId){
+  const inv = investments.find(function(i){ return i.id===invId; });
+  if(!inv) return;
+  inv.transactions = (inv.transactions||[]).filter(function(t){ return t.id!==txId; });
+  await saveOneInvestment(inv);
+  render();
+  toast('Transaction removed.');
 }
 
 /* ============================== INVESTMENTS — MODALS ============================== */
@@ -1318,6 +1476,7 @@ function openFundForm(invId, fundId){
     +'<label style="margin-top:12px;">Units Held<input name="units" type="number" step="0.0001" min="0" value="'+(fund ? fund.units||'' : '')+'" placeholder="e.g. 1500.5" required></label>'
     +'<label style="margin-top:12px;">Purchase NAV (per unit)<input name="purchaseNav" type="number" step="0.0001" min="0" value="'+(fund ? fund.purchaseNav||'' : '')+'" placeholder="e.g. 12.3456" required></label>'
     +'<label style="margin-top:12px;">Latest NAV <span style="color:var(--ink-faint);font-size:11px;">(auto-filled on refresh)</span><input name="latestNav" type="number" step="0.0001" min="0" value="'+(fund ? fund.latestNav||'' : '')+'"></label>'
+    +'<label style="margin-top:12px;">Allocation % <span style="color:var(--ink-faint);font-size:11px;">(optional)</span><input name="allocationPct" type="number" step="0.01" min="0" max="100" value="'+(fund ? fund.allocationPct||'' : '')+'" placeholder="e.g. 30"></label>'
     +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">'
     +'<button type="button" class="btn btn-sm" data-action="close-modal">Cancel</button>'
     +'<button type="submit" class="btn btn-primary">Save Fund</button>'
@@ -1331,6 +1490,7 @@ function openFundForm(invId, fundId){
       currency: fd.get('currency'), units: parseFloat(fd.get('units')),
       purchaseNav: parseFloat(fd.get('purchaseNav')),
       latestNav: fd.get('latestNav') ? parseFloat(fd.get('latestNav')) : (fund ? fund.latestNav||null : null),
+      allocationPct: fd.get('allocationPct') ? parseFloat(fd.get('allocationPct')) : (fund ? fund.allocationPct||null : null),
       navDate: fund ? fund.navDate||null : null, navName: fund ? fund.navName||null : null,
     };
     if(!inv.funds) inv.funds = [];
@@ -1410,6 +1570,8 @@ document.addEventListener('click', async (e) => {
   else if(action === 'delete-fund'){ deleteFund(t.dataset.inv, t.dataset.fund); }
   else if(action === 'refresh-prices'){ refreshPrices(id, false); }
   else if(action === 'refresh-all-prices'){ refreshAllPrices(); }
+  else if(action === 'open-import-csv'){ openImportCSV(id); }
+  else if(action === 'delete-transaction'){ deleteTransaction(t.dataset.inv, t.dataset.tx); }
 });
 
 /* ============================== INIT ============================== */
