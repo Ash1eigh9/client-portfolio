@@ -1178,12 +1178,15 @@ function investmentCard(inv){
     totalInvested += Number(f.units||0) * Number(f.purchaseNav||0);
     totalValue += Number(f.units||0) * Number(f.latestNav || f.purchaseNav || 0);
   });
-  const PREMIUM_TYPES = ['basic regular premium','bonus unit','single premium','top-up','top up'];
   var premiumsSGD = 0;
-  (inv.transactions||[]).forEach(function(t){
-    if(PREMIUM_TYPES.some(function(k){ return (t.type||'').toLowerCase().includes(k); }))
-      premiumsSGD += Math.abs(Number(t.amount)||0);
-  });
+  funds.forEach(function(f){ premiumsSGD += Number(f.costSGD||0); });
+  if(!premiumsSGD){
+    const PREM = ['basic regular premium','bonus unit','single premium','top-up','top up'];
+    (inv.transactions||[]).forEach(function(t){
+      if(PREM.some(function(k){ return (t.type||'').toLowerCase().includes(k); }))
+        premiumsSGD += Math.abs(Number(t.amount)||0);
+    });
+  }
   const displayInvested = premiumsSGD > 0 ? premiumsSGD : totalInvested;
   const displayCcy = premiumsSGD > 0 ? 'SGD' : (inv.currency||'SGD');
   const gain = totalValue - totalInvested;
@@ -1223,37 +1226,43 @@ function renderInvestmentDetail(main){
   const funds = inv.funds || [];
   const txns  = (inv.transactions || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
   const clientName = (clients.find(function(c){ return c.id === inv.clientId; }) || {}).name || inv.clientId || '—';
-  // Total premiums paid in policy currency (SGD) from transaction history
-  const PREMIUM_TYPES = ['basic regular premium','bonus unit','single premium','top-up','top up'];
-  var totalPremiumsSGD = 0;
-  (inv.transactions||[]).forEach(function(t){
-    if(PREMIUM_TYPES.some(function(k){ return (t.type||'').toLowerCase().includes(k); })){
-      totalPremiumsSGD += Math.abs(Number(t.amount)||0);
-    }
+  // Totals — cost always in SGD (from transaction policy currency amounts)
+  var totalCostSGD = 0, totalFundCost = 0, totalFundValue = 0;
+  funds.forEach(function(f){
+    totalCostSGD  += Number(f.costSGD||0);
+    totalFundCost += Number(f.units||0) * Number(f.purchaseNav||0);
+    totalFundValue+= Number(f.units||0) * Number(f.latestNav || f.purchaseNav || 0);
   });
-  var totalInvested = 0, totalValue = 0;
+  // fallback: sum SGD from transactions if costSGD not stored yet
+  if(!totalCostSGD){
+    const PREM = ['basic regular premium','bonus unit','single premium','top-up','top up'];
+    (inv.transactions||[]).forEach(function(t){
+      if(PREM.some(function(k){ return (t.type||'').toLowerCase().includes(k); }))
+        totalCostSGD += Math.abs(Number(t.amount)||0);
+    });
+  }
   const rows = funds.map(function(f){
-    const cost = Number(f.units||0) * Number(f.purchaseNav||0);
-    const val  = Number(f.units||0) * Number(f.latestNav || f.purchaseNav || 0);
-    const gain = val - cost;
-    const pct  = cost ? (gain / cost * 100) : null;
-    totalInvested += cost; totalValue += val;
-    const fCcy = f.currency || inv.currency || 'SGD';
+    const fCcy = f.currency || 'USD';
+    const costSGD = Number(f.costSGD||0);
+    const fundCost = Number(f.units||0) * Number(f.purchaseNav||0);
+    const fundVal  = Number(f.units||0) * Number(f.latestNav || f.purchaseNav || 0);
+    const fundGain = fundVal - fundCost;
+    const fundPct  = fundCost ? (fundGain / fundCost * 100) : null;
     return '<tr>'
-      +'<td>'+esc(f.name)+'<br><span style="font-size:11px;color:var(--ink-faint);">'+esc(f.isin||'')+'</span></td>'
-      +'<td style="text-align:right;">'+(f.allocationPct ? esc(f.allocationPct)+'%' : '—')+'</td>'
+      +'<td>'+esc(f.name)+'<br><span style="font-size:11px;color:var(--ink-faint);">'+esc(f.isin||'')+' · '+esc(fCcy)+'</span></td>'
+      +'<td style="text-align:right;">'+(f.allocationPct ? esc(String(f.allocationPct))+'%' : '—')+'</td>'
       +'<td style="text-align:right;">'+fmtMoney(f.units,4)+'</td>'
       +'<td style="text-align:right;">'+esc(fCcy)+' '+fmtMoney(f.purchaseNav,4)+'</td>'
       +'<td style="text-align:right;">'+(f.latestNav ? esc(fCcy)+' '+fmtMoney(f.latestNav,4) : '<span style="color:var(--ink-faint);">—</span>')+'</td>'
-      +'<td style="text-align:right;">'+esc(fCcy)+' '+fmtMoney(cost)+'</td>'
-      +'<td style="text-align:right;" class="'+perfClass(gain)+'">'+esc(fCcy)+' '+(gain>=0?'+':'')+fmtMoney(gain)+'<br><small>'+fmtPct(pct)+'</small></td>'
+      +'<td style="text-align:right;">SGD '+fmtMoney(costSGD)+'</td>'
+      +'<td style="text-align:right;" class="'+perfClass(fundGain)+'">'+esc(fCcy)+' '+(fundGain>=0?'+':'')+fmtMoney(fundGain)+'<br><small>'+fmtPct(fundPct)+'</small></td>'
       +'<td style="text-align:right;">'
       +'<button class="btn btn-sm" data-action="open-fund-form" data-inv="'+esc(inv.id)+'" data-fund="'+esc(f.id)+'" title="Edit" style="margin-right:4px;">'+icon('edit')+'</button>'
       +'<button class="btn btn-sm" style="color:var(--red);" data-action="delete-fund" data-inv="'+esc(inv.id)+'" data-fund="'+esc(f.id)+'" title="Remove">'+icon('trash')+'</button>'
       +'</td></tr>';
   }).join('');
-  const totalGain = totalValue - totalInvested;
-  const totalPct  = totalInvested ? (totalGain / totalInvested * 100) : null;
+  const totalFundGain = totalFundValue - totalFundCost;
+  const totalFundPct  = totalFundCost ? (totalFundGain / totalFundCost * 100) : null;
   const txRows = txns.map(function(t){
     const typeColor = t.type==='Top-up'||t.type==='Switch In' ? 'var(--green)' : t.type==='Switch Out'||t.type==='Partial Withdrawal' ? 'var(--red)' : 'var(--ink)';
     return '<tr>'
@@ -1279,20 +1288,18 @@ function renderInvestmentDetail(main){
     +'<h2 style="margin:0 0 4px;">'+esc(inv.product)+'</h2>'
     +'<div style="color:var(--ink-faint);font-size:13px;margin-bottom:20px;">'+esc(clientName)+' · Policy No: '+esc(inv.policyNo||'—')+' · '+esc(inv.currency||'SGD')+'</div>'
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;">'
-    +(totalPremiumsSGD > 0
-      ? '<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Premiums Paid (SGD)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(totalPremiumsSGD)+'</div></div>'
-      : '<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Total Invested</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalInvested)+'</div></div>')
-    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Cost (Fund Ccy)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+fmtMoney(totalInvested)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Avg cost × net units</div></div>'
-    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Value (Fund Ccy)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+fmtMoney(totalValue)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Net units × latest NAV</div></div>'
-    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Gain / Loss</div><div style="font-size:20px;font-weight:700;margin-top:4px;" class="'+perfClass(totalGain)+'">'+(totalGain>=0?'+':'')+fmtMoney(totalGain)+'<br><small style="font-size:13px;">'+fmtPct(totalPct)+'</small></div></div>'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Premiums Paid (SGD)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(totalCostSGD)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">From transaction history</div></div>'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Cost (Fund Ccy)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+fmtMoney(totalFundCost)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Avg purchase NAV × net units</div></div>'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Value (Fund Ccy)</div><div style="font-size:20px;font-weight:700;margin-top:4px;">'+fmtMoney(totalFundValue)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Latest NAV × net units</div></div>'
+    +'<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Fund Gain / Loss</div><div style="font-size:20px;font-weight:700;margin-top:4px;" class="'+perfClass(totalFundGain)+'">'+(totalFundGain>=0?'+':'')+fmtMoney(totalFundGain)+'<br><small style="font-size:13px;">'+fmtPct(totalFundPct)+'</small></div></div>'
     +'</div>'
     +'<h3 style="margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);">Fund Holdings</h3>'
     +(funds.length === 0
       ? '<div class="empty-state" style="margin-bottom:24px;"><p>No funds yet. Use <strong>Import CSV</strong> or <strong>Add Fund</strong>.</p></div>'
       : '<div style="overflow-x:auto;margin-bottom:28px;"><table class="fund-table">'
-        +'<thead><tr><th>Fund Name / ISIN</th><th style="text-align:right;">Alloc %</th><th style="text-align:right;">Units</th><th style="text-align:right;">Purchase NAV</th><th style="text-align:right;">Latest NAV</th><th style="text-align:right;">Cost</th><th style="text-align:right;">Gain / Loss</th><th style="text-align:right;">Actions</th></tr></thead>'
+        +'<thead><tr><th>Fund Name / ISIN · Ccy</th><th style="text-align:right;">Alloc %</th><th style="text-align:right;">Net Units</th><th style="text-align:right;">Avg Purchase NAV</th><th style="text-align:right;">Latest NAV</th><th style="text-align:right;">Cost (SGD)</th><th style="text-align:right;">Gain / Loss (Fund Ccy)</th><th style="text-align:right;">Actions</th></tr></thead>'
         +'<tbody>'+rows+'</tbody>'
-        +'<tfoot><tr><td colspan="5">Total</td><td style="text-align:right;">'+esc(inv.currency||'SGD')+' '+fmtMoney(totalInvested)+'</td><td style="text-align:right;" class="'+perfClass(totalGain)+'">'+esc(inv.currency||'SGD')+' '+(totalGain>=0?'+':'')+fmtMoney(totalGain)+' ('+fmtPct(totalPct)+')</td><td></td></tr></tfoot>'
+        +'<tfoot><tr><td colspan="5">Total</td><td style="text-align:right;">SGD '+fmtMoney(totalCostSGD)+'</td><td style="text-align:right;" class="'+perfClass(totalFundGain)+'">'+(totalFundGain>=0?'+':'')+fmtMoney(totalFundGain)+' ('+fmtPct(totalFundPct)+')</td><td></td></tr></tfoot>'
         +'</table></div>')
     +'<h3 style="margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);">Transactions</h3>'
     +(txns.length === 0
@@ -1488,15 +1495,19 @@ function recomputeHoldingsFromTransactions(inv){
       fundMap[key] = {
         name: t.fundName, isin: t.isin||'',
         currency: currMatch ? currMatch[1] : (inv.currency||'SGD'),
-        netUnits: 0, posUnits: 0, posCost: 0, latestPrice: 0
+        netUnits: 0, posUnits: 0, posCost: 0, costSGD: 0, latestPrice: 0
       };
     }
     const fm = fundMap[key];
     const u = Number(t.units)||0;
     const p = Number(t.price)||0;
     fm.netUnits += u;
-    if(u > 0){ fm.posUnits += u; fm.posCost += u * p; }
-    if(p > 0) fm.latestPrice = p; // last known price
+    if(u > 0){
+      fm.posUnits += u;
+      fm.posCost += u * p;                        // fund-currency cost
+      fm.costSGD += Math.abs(Number(t.amount)||0); // SGD cost from policy currency column
+    }
+    if(p > 0) fm.latestPrice = p;
     if(t.isin && !fm.isin) fm.isin = t.isin;
   });
   const prevFunds = inv.funds || [];
@@ -1514,6 +1525,7 @@ function recomputeHoldingsFromTransactions(inv){
       currency: fm.currency,
       units: netUnits,
       purchaseNav: weightedAvgNav,
+      costSGD: parseFloat(fm.costSGD.toFixed(2)),
       latestNav: existing && existing.latestNav ? existing.latestNav : null,
       allocationPct: existing ? existing.allocationPct||null : null,
       navDate: existing ? existing.navDate||null : null,
