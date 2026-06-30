@@ -1132,57 +1132,80 @@ async function fetchFxRates(){
   }catch(e){ return null; }
 }
 
-function computeAutoCashValue(inv, fxRates){
-  // Sum: netUnits × latestNAV in fund ccy → SGD via live FX
+// Per-fund SGD value. Falls back to the last known / purchase NAV when no live
+// price exists (most HSBC Life ILP sub-funds are insurer-internal share classes
+// and are never listed on Financial Times, so a live match should be the
+// exception, not a requirement) — a fund must never be silently dropped from
+// the total just because it has no live quote.
+function fundValueSGD(f, fxRates){
+  const units = Number(f.units||0);
+  if(!units) return null;
+  const liveNav = Number(f.latestNav||0);
+  const nav = liveNav || Number(f.purchaseNav||0);
+  if(!nav) return null;
+  const ccy = (f.currency||'SGD').toUpperCase();
   // fxRates is keyed by currency code, values are "units of that ccy per 1 SGD"
   // e.g. fxRates.USD = 0.74 means 1 SGD = 0.74 USD, so 1 USD = 1/0.74 SGD
+  const rate = ccy === 'SGD' ? 1 : (fxRates && fxRates[ccy] ? 1 / fxRates[ccy] : null);
+  if(rate === null) return null;
+  return { valueSGD: units * nav * rate, usedLive: !!liveNav, nav: nav, ccy: ccy };
+}
+
+function computeAutoCashValue(inv, fxRates){
   if(!fxRates || !inv.funds || !inv.funds.length) return null;
-  let total = 0; let hasVal = false;
+  let total = 0, hasVal = false, liveCount = 0, totalCount = 0;
   (inv.funds||[]).forEach(function(f){
-    const units = Number(f.units||0);
-    const nav   = Number(f.latestNav||0);
-    const ccy   = (f.currency||'SGD').toUpperCase();
-    if(!units || !nav) return;
-    const rate = ccy === 'SGD' ? 1 : (fxRates[ccy] ? 1 / fxRates[ccy] : null);
-    if(rate === null) return;
-    total += units * nav * rate;
-    hasVal = true;
+    const r = fundValueSGD(f, fxRates);
+    if(!r) return;
+    total += r.valueSGD; hasVal = true; totalCount++;
+    if(r.usedLive) liveCount++;
   });
-  return hasVal ? parseFloat(total.toFixed(2)) : null;
+  return hasVal ? { value: parseFloat(total.toFixed(2)), liveCount: liveCount, totalCount: totalCount } : null;
 }
 
 async function refreshPrices(invId, silent){
   const inv = investments.find(i => i.id === invId);
   if(!inv || !inv.funds || !inv.funds.length) return;
   const symbols = inv.funds.filter(f => f.isin && f.currency).map(f => `${f.isin}:${f.currency}`);
-  if(!symbols.length){ if(!silent) toast('No funds with ISIN/currency set.', 'warn'); return; }
   const btn = document.querySelector(`[data-action="refresh-prices"][data-id="${invId}"]`);
   if(btn) btn.querySelector('svg')?.classList.add('spinning');
   try{
     const [navRes, fxRates] = await Promise.all([
-      fetch(`${WORKER_URL}?symbols=${symbols.join(',')}`),
+      symbols.length ? fetch(`${WORKER_URL}?symbols=${symbols.join(',')}`) : Promise.resolve(null),
       fetchFxRates()
     ]);
-    if(!navRes.ok) throw new Error('Worker HTTP ' + navRes.status);
-    const json = await navRes.json();
-    if(!json.ok) throw new Error(json.error || 'Worker error');
-    inv.funds.forEach(f => {
-      const sym = `${f.isin}:${f.currency}`;
-      const d = json.data[sym];
-      if(d && d.price){ f.latestNav = d.price; f.navDate = d.priceDate; f.navName = d.name; }
-    });
+    if(navRes){
+      if(!navRes.ok) throw new Error('Worker HTTP ' + navRes.status);
+      const json = await navRes.json();
+      if(!json.ok) throw new Error(json.error || 'Worker error');
+      inv.funds.forEach(f => {
+        const sym = `${f.isin}:${f.currency}`;
+        const d = json.data[sym];
+        if(d && d.price){ f.latestNav = d.price; f.navDate = d.priceDate; f.navName = d.name; }
+      });
+    }
     inv.lastRefreshed = new Date().toISOString();
+    inv.fxRates = fxRates || inv.fxRates || null; // persist so render-time fund table can use live FX too
     // auto-compute cash value — only overwrite if user hasn't manually set it
     if(inv.cashValueSource !== 'manual'){
       const auto = computeAutoCashValue(inv, fxRates);
       if(auto !== null){
-        inv.cashValue = auto;
+        inv.cashValue = auto.value;
         inv.cashValueDate = new Date().toISOString().slice(0,10);
         inv.cashValueSource = 'auto';
+        inv.navLiveCount = auto.liveCount;
+        inv.navTotalCount = auto.totalCount;
       }
     }
     await saveOneInvestment(inv);
-    if(!silent) toast('Prices and cash value updated.');
+    if(!silent){
+      const live = inv.navLiveCount||0, tot = inv.navTotalCount||0;
+      if(tot && live < tot){
+        toast('Updated — only '+live+' of '+tot+' funds have a live market price (HSBC ILP sub-funds aren\'t on public feeds). The rest use last known NAV, so this total is an estimate. Enter the official Cash Value from the HSBC portal for an exact figure.', 'warn');
+      } else {
+        toast('Prices and cash value updated.');
+      }
+    }
     if(view.type === 'investments' || view.type === 'investment-detail') render();
   }catch(e){
     if(!silent) toast('Refresh failed: ' + e.message, 'danger');
@@ -1229,13 +1252,11 @@ function investmentCard(inv){
         premiumsSGD += Math.abs(Number(t.amount)||0);
     });
   }
-  // SGD account value from NAV ratio × costSGD
+  // SGD account value: units × NAV (live, falling back to purchase NAV) × live FX
   var accountValSGD = 0;
-  funds.forEach(function(f){
-    const pNav = Number(f.purchaseNav||0);
-    const lNav = Number(f.latestNav||0);
-    const cSGD = Number(f.costSGD||0);
-    if(pNav > 0 && cSGD > 0) accountValSGD += (lNav > 0 ? lNav/pNav : 1) * cSGD;
+  if(inv.fxRates) funds.forEach(function(f){
+    const r = fundValueSGD(f, inv.fxRates);
+    if(r) accountValSGD += r.valueSGD;
   });
   const displayAccountVal = Number(inv.cashValue||0) > 0 ? Number(inv.cashValue) : (accountValSGD > 0 ? accountValSGD : 0);
   const displayInvested = premiumsSGD > 0 ? premiumsSGD : totalInvested;
@@ -1257,7 +1278,7 @@ function investmentCard(inv){
       : '')
     +'</div>'
     +(Number(inv.cashValue||0) > 0
-      ? '<div style="font-size:11px;color:var(--ink-faint);margin-top:8px;">'+(inv.cashValueSource==='manual'?'Manual override from HSBC portal':'Auto-calculated · units × NAV × live FX')+(inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '')+'</div>'
+      ? '<div style="font-size:11px;color:'+(inv.cashValueSource!=='manual' && inv.navTotalCount && inv.navLiveCount < inv.navTotalCount ? 'var(--amber)' : 'var(--ink-faint)')+';margin-top:8px;">'+(inv.cashValueSource==='manual'?'Manual override from HSBC portal':('Auto-estimate · units × NAV × live FX'+(inv.navTotalCount ? ' · '+(inv.navLiveCount||0)+'/'+inv.navTotalCount+' funds live-priced' : '')))+(inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '')+'</div>'
       : inv.lastRefreshed ? '<div style="font-size:11px;color:var(--ink-faint);margin-top:8px;">NAV refreshed: '+new Date(inv.lastRefreshed).toLocaleString('en-SG')+'</div>' : '<div style="font-size:11px;color:var(--amber);margin-top:8px;">Refresh NAV to auto-calculate cash value</div>')
     +'</div>';
 }
@@ -1299,18 +1320,18 @@ function renderInvestmentDetail(main){
   }
   // linked policy overrides everything for premiums paid display
   const premiumsDisplay = linkedPrem ? linkedPrem.total : totalCostSGD;
-  // Account value in SGD: apply each fund's NAV growth ratio to its SGD cost
-  // Formula: accountValueSGD_per_fund = (latestNAV / purchaseNAV) * costSGD
+  // Account value in SGD: units × NAV (live, falling back to purchase NAV) × live FX —
+  // same calculation used everywhere else so the header card, this total, and the
+  // per-fund rows below never disagree with each other.
   var totalAccountValueSGD = 0;
   var hasAnyNav = false;
-  funds.forEach(function(f){
-    const pNav = Number(f.purchaseNav||0);
-    const lNav = Number(f.latestNav||0);
-    const cSGD = Number(f.costSGD||0);
-    if(pNav > 0 && cSGD > 0){
-      const navRatio = lNav > 0 ? lNav / pNav : 1;
-      totalAccountValueSGD += navRatio * cSGD;
-      if(lNav > 0) hasAnyNav = true;
+  var navLiveCount = 0, navTotalCount = 0;
+  if(inv.fxRates) funds.forEach(function(f){
+    const r = fundValueSGD(f, inv.fxRates);
+    if(r){
+      totalAccountValueSGD += r.valueSGD;
+      navTotalCount++;
+      if(r.usedLive){ hasAnyNav = true; navLiveCount++; }
     }
   });
   const displayCashVal = Number(inv.cashValue||0) > 0 ? Number(inv.cashValue) : totalAccountValueSGD;
@@ -1321,22 +1342,19 @@ function renderInvestmentDetail(main){
     const costSGD = Number(f.costSGD||0);
     const pNav = Number(f.purchaseNav||0);
     const lNav = Number(f.latestNav||0);
-    const navRatio = (pNav > 0 && lNav > 0) ? lNav / pNav : (pNav > 0 ? 1 : 0);
-    const valueSGD = navRatio * costSGD;
+    const r = inv.fxRates ? fundValueSGD(f, inv.fxRates) : null;
+    const valueSGD = r ? r.valueSGD : 0;
     const fundGainSGD = valueSGD - costSGD;
     const fundGainPct = costSGD ? (fundGainSGD / costSGD * 100) : null;
-    const fundCost = Number(f.units||0) * pNav;
-    const fundVal  = Number(f.units||0) * (lNav || pNav);
-    const fundGain = fundVal - fundCost;
     return '<tr>'
       +'<td>'+esc(f.name)+'<br><span style="font-size:11px;color:var(--ink-faint);">'+esc(f.isin||'')+' · '+esc(fCcy)+'</span></td>'
       +'<td style="text-align:right;">'+(f.allocationPct ? esc(String(f.allocationPct))+'%' : '—')+'</td>'
       +'<td style="text-align:right;">'+fmtMoney(f.units,4)+'</td>'
       +'<td style="text-align:right;">'+esc(fCcy)+' '+fmtMoney(pNav,4)+'</td>'
-      +'<td style="text-align:right;">'+(lNav ? esc(fCcy)+' '+fmtMoney(lNav,4) : '<span style="color:var(--ink-faint);">—</span>')+'</td>'
+      +'<td style="text-align:right;">'+(lNav ? esc(fCcy)+' '+fmtMoney(lNav,4) : '<span style="color:var(--ink-faint);">—</span>')+(r && !r.usedLive ? '<br><span style="font-size:10px;color:var(--amber);">est. (purchase NAV)</span>' : (r && r.usedLive ? '<br><span style="font-size:10px;color:var(--green);">live</span>' : ''))+'</td>'
       +'<td style="text-align:right;">SGD '+fmtMoney(costSGD)+'</td>'
-      +'<td style="text-align:right;">'+(costSGD && pNav ? 'SGD '+fmtMoney(valueSGD) : '<span style="color:var(--ink-faint);">—</span>')+'</td>'
-      +'<td style="text-align:right;" class="'+perfClass(fundGainSGD)+'">'+(costSGD && pNav ? (fundGainSGD>=0?'+':'')+fmtMoney(fundGainSGD)+'<br><small>'+fmtPct(fundGainPct)+'</small>' : '—')+'</td>'
+      +'<td style="text-align:right;">'+(r ? 'SGD '+fmtMoney(valueSGD) : '<span style="color:var(--ink-faint);">—</span>')+'</td>'
+      +'<td style="text-align:right;" class="'+perfClass(fundGainSGD)+'">'+(r && costSGD ? (fundGainSGD>=0?'+':'')+fmtMoney(fundGainSGD)+'<br><small>'+fmtPct(fundGainPct)+'</small>' : '—')+'</td>'
       +'<td style="text-align:right;">'
       +'<button class="btn btn-sm" data-action="open-fund-form" data-inv="'+esc(inv.id)+'" data-fund="'+esc(f.id)+'" title="Edit" style="margin-right:4px;">'+icon('edit')+'</button>'
       +'<button class="btn btn-sm" style="color:var(--red);" data-action="delete-fund" data-inv="'+esc(inv.id)+'" data-fund="'+esc(f.id)+'" title="Remove">'+icon('trash')+'</button>'
@@ -1375,7 +1393,7 @@ function renderInvestmentDetail(main){
       : '<div style="font-size:14px;color:var(--ink-faint);margin-top:6px;">—</div><div style="font-size:11px;color:var(--amber);margin-top:2px;">Edit portfolio to link a policy</div>')
     +'</div>'
     +(displayCashVal > 0
-      ? '<div class="card" style="padding:16px 20px;min-width:160px;border:1px solid var(--line);"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Account Value (SGD)</div><div style="font-size:22px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(displayCashVal)+'</div><div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">'+(Number(inv.cashValue||0) > 0 ? (inv.cashValueSource==='manual' ? 'Manual — from HSBC portal' : 'Auto · units × NAV × live FX')+(inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '') : (hasAnyNav ? 'Based on latest NAV' : 'Refresh NAV to calculate'))+'</div></div>'
+      ? '<div class="card" style="padding:16px 20px;min-width:160px;border:1px solid var(--line);"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Account Value (SGD)</div><div style="font-size:22px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(displayCashVal)+'</div><div style="font-size:11px;color:'+(inv.cashValueSource!=='manual' && navTotalCount && navLiveCount < navTotalCount ? 'var(--amber)' : 'var(--ink-faint)')+';margin-top:2px;">'+(Number(inv.cashValue||0) > 0 ? (inv.cashValueSource==='manual' ? 'Manual — from HSBC portal' : ('Auto-estimate · units × NAV × live FX'+(navTotalCount ? ' · '+navLiveCount+'/'+navTotalCount+' funds live-priced' : '')))+(inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '') : (hasAnyNav ? 'Based on latest NAV' : 'Refresh NAV to calculate'))+'</div></div>'
       : '')
     +(displayCashVal > 0 && premiumsDisplay
       ? '<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Overall Gain / Loss (SGD)</div><div style="font-size:22px;font-weight:700;margin-top:4px;" class="'+perfClass(gainSGD)+'">'+(gainSGD>=0?'+':'')+fmtMoney(gainSGD)+'</div><div style="font-size:13px;margin-top:2px;" class="'+perfClass(gainSGD)+'">'+fmtPct(gainSGDPct)+'</div></div>'
