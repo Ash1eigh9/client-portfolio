@@ -1190,6 +1190,7 @@ function computeAutoCashValue(inv, fxRates){
   if(!fxRates || !inv.funds || !inv.funds.length) return null;
   let total = 0, hasVal = false, liveCount = 0, totalCount = 0;
   (inv.funds||[]).forEach(function(f){
+    if(!Number(f.units||0)) return; // skip exited (zero-unit) funds from live count
     const r = fundValueSGD(f, fxRates);
     if(!r) return;
     total += r.valueSGD; hasVal = true; totalCount++;
@@ -1538,6 +1539,11 @@ function openImportCSV(invId){
     +'<option value="holdings">Fund Holdings (name, ISIN, units, NAV, allocation)</option>'
     +'<option value="transactions">Fund Transactions (date, type, units, price)</option>'
     +'</select>'
+    +'<div id="replaceAllRow" style="margin:0 0 14px;padding:10px 12px;background:rgba(245,158,11,0.08);border-radius:6px;border:1px solid var(--amber);">'
+    +'<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;">'
+    +'<input type="checkbox" id="replaceAllFunds" style="width:14px;height:14px;flex-shrink:0;margin-top:1px;">'
+    +'<span><strong>Replace all funds</strong> — clears existing holdings and imports only what is in this file. Use when importing a current policy snapshot (e.g. HSBC Policy Funds CSV) so stale funds are removed.</span>'
+    +'</label></div>'
     +'<label style="font-weight:600;margin-bottom:6px;display:block;">Select CSV file</label>'
     +'<input type="file" id="csvFileInput" accept=".csv,.txt" style="margin-bottom:6px;">'
     +'<div id="importStatus" style="font-size:12px;min-height:18px;margin-top:4px;"></div>'
@@ -1547,6 +1553,9 @@ function openImportCSV(invId){
     +'</div>');
   document.getElementById('dlHoldingsBtn').onclick = function(){ downloadCSVTemplate('holdings'); };
   document.getElementById('dlTxBtn').onclick = function(){ downloadCSVTemplate('transactions'); };
+  document.getElementById('importType').addEventListener('change', function(){
+    document.getElementById('replaceAllRow').style.display = this.value === 'holdings' ? '' : 'none';
+  });
   document.getElementById('csvFileInput').addEventListener('change', async function(){
     const statusEl = document.getElementById('importStatus');
     if(!this.files[0]){ statusEl.innerHTML = ''; return; }
@@ -1570,23 +1579,42 @@ function openImportCSV(invId){
     let added = 0, updated = 0, skipped = 0;
     if(importType === 'holdings'){
       if(!inv.funds) inv.funds = [];
+      const replaceAll = !!(document.getElementById('replaceAllFunds') && document.getElementById('replaceAllFunds').checked);
+      if(replaceAll) inv.funds = [];
+      // Two-pass: collect rows into a map first, summing units for duplicate fund names
+      // (handles IUA + AUA sections in HSBC Policy Funds CSV — same fund appears twice)
+      const tempMap = {}, tempOrder = [];
       rows.forEach(function(r){
         const name = col(r,['fund name','fund','fund description','description','sub fund','fund title']);
-        const isin = col(r,['isin','isin code','fund code']).toUpperCase();
         if(!name){ skipped++; return; }
-        const existing = inv.funds.find(function(f){ return (isin && f.isin && f.isin===isin) || f.name.toLowerCase()===name.toLowerCase(); });
-        const units = parseFloat(col(r,['units','unit','quantity','no of units','number of units','units held']).replace(/,/g,''));
-        const purchaseNav = parseFloat(col(r,['purchase nav','purchasenav','nav at purchase','cost nav','purchase price','average cost','ave cost']).replace(/,/g,''));
-        if(isNaN(units) && !existing){ skipped++; return; }
+        const isin = col(r,['isin','isin code','fund code']).toUpperCase();
+        const rawUnits = col(r,['units','unit','quantity','no of units','number of units','units held']).replace(/,/g,'');
+        const units = parseFloat(rawUnits)||0;
+        const latestNav = parseFloat(col(r,['latest nav','latestnav','current nav','nav','unit price','bid price']).replace(/,/g,''))||0;
+        const purchaseNav = parseFloat(col(r,['purchase nav','purchasenav','nav at purchase','cost nav','purchase price','average cost','ave cost']).replace(/,/g,''))||0;
+        const currency = col(r,['fund currency','currency','ccy'])||'';
+        const allocationPct = parseFloat(col(r,['allocation %','allocation','allocationpct','alloc %','alloc','weight %','weight','premium allocation (%)'])||'0')||null;
+        const key = (isin||name).toLowerCase();
+        if(tempMap[key]){
+          tempMap[key].units += units;
+        } else {
+          tempMap[key] = { name, isin, currency, units, latestNav, purchaseNav, allocationPct };
+          tempOrder.push(key);
+        }
+      });
+      tempOrder.forEach(function(key){
+        const fd = tempMap[key];
+        const existing = inv.funds.find(function(f){ return (fd.isin && f.isin && f.isin===fd.isin) || f.name.toLowerCase()===fd.name.toLowerCase(); });
         const fdata = {
           id: existing ? existing.id : uid(),
-          name: name,
-          isin: isin || (existing ? existing.isin||'' : ''),
-          currency: col(r,['currency','ccy','fund currency']) || (existing ? existing.currency||'USD' : 'USD'),
-          units: isNaN(units) ? (existing ? existing.units : 0) : units,
-          purchaseNav: isNaN(purchaseNav) ? (existing ? existing.purchaseNav : 0) : purchaseNav,
-          latestNav: parseFloat(col(r,['latest nav','latestnav','current nav','nav','unit price','bid price','offer price']).replace(/,/g,'')) || (existing ? existing.latestNav||null : null),
-          allocationPct: parseFloat(col(r,['allocation %','allocation','allocationpct','alloc %','alloc','weight %','weight']).replace(/,/g,'')) || (existing ? existing.allocationPct||null : null),
+          name: fd.name,
+          isin: fd.isin || (existing ? existing.isin||'' : ''),
+          currency: fd.currency || (existing ? existing.currency||'USD' : 'USD'),
+          units: fd.units,
+          purchaseNav: fd.purchaseNav || (existing ? existing.purchaseNav||0 : 0),
+          costSGD: existing ? existing.costSGD||0 : 0,
+          latestNav: fd.latestNav || (existing ? existing.latestNav||null : null),
+          allocationPct: fd.allocationPct || (existing ? existing.allocationPct||null : null),
           navDate: existing ? existing.navDate||null : null,
           navName: existing ? existing.navName||null : null,
         };
