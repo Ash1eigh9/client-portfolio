@@ -1430,6 +1430,14 @@ function renderInvestmentDetail(main){
     +'<button class="btn btn-sm" data-action="open-import-csv" data-id="'+esc(inv.id)+'">&#x2B06; Import CSV</button>'
     +'<button class="btn btn-sm" data-action="open-fund-form" data-inv="'+esc(inv.id)+'">'+icon('plus')+' Add Fund</button>'
     +'<button class="btn btn-sm" data-action="open-investment-form" data-id="'+esc(inv.id)+'">'+icon('edit')+' Edit</button>'
+    +(inv.ilpMonthlyPremium ? (function(){
+      const today = new Date();
+      const premDay = Number(inv.ilpPremiumDay||1);
+      const lastApplied = inv.ilpLastPremiumApplied ? new Date(inv.ilpLastPremiumApplied) : null;
+      const thisMonthDue = new Date(today.getFullYear(), today.getMonth(), premDay);
+      const overdue = today >= thisMonthDue && (!lastApplied || lastApplied < thisMonthDue);
+      return '<button class="btn btn-sm" style="background:'+(overdue?'var(--amber)':'var(--blue)')+';color:#fff;border-color:transparent;" data-action="apply-premium" data-id="'+esc(inv.id)+'">'+(overdue?'&#9888; ':'')+'Apply Premium</button>';
+    })() : '')
     +'<button class="btn btn-sm" style="color:var(--red);" data-action="delete-investment" data-id="'+esc(inv.id)+'">'+icon('trash')+' Delete</button>'
     +'</div></div>'
     +'<h2 style="margin:0 0 4px;">'+esc(inv.product)+'</h2>'
@@ -1608,6 +1616,7 @@ function openImportCSV(invId){
         const key = (isin||name).toLowerCase();
         if(tempMap[key]){
           tempMap[key].units += units;
+          if((allocationPct||0) > (tempMap[key].allocationPct||0)) tempMap[key].allocationPct = allocationPct;
         } else {
           tempMap[key] = { name, isin, currency, units, latestNav, purchaseNav, allocationPct };
           tempOrder.push(key);
@@ -1765,6 +1774,78 @@ function getLinkedPremiums(inv){
   if(!policy) return null;
   return calcPremiumsPaid(policy);
 }
+function openApplyPremiumModal(invId){
+  const inv = investments.find(function(i){ return i.id === invId; });
+  if(!inv) return;
+  const premium = Number(inv.ilpMonthlyPremium||0);
+  if(!premium){ toast('Set the Monthly Premium in Edit Portfolio first.','warn'); return; }
+
+  // Determine IUA or AUA based on months elapsed since policy start
+  const startDate = inv.ilpPolicyStartDate ? new Date(inv.ilpPolicyStartDate) : null;
+  const iuaMonths = Number(inv.ilpIuaPeriodMonths||18);
+  const today = new Date();
+  let monthsElapsed = 0;
+  if(startDate){
+    monthsElapsed = (today.getFullYear()-startDate.getFullYear())*12 + (today.getMonth()-startDate.getMonth());
+  }
+  const inIUA = startDate && monthsElapsed < iuaMonths;
+  const allocRate = inIUA ? Number(inv.ilpAllocationRateIUA||120) : Number(inv.ilpAllocationRateAUA||100);
+  const spread = inIUA ? Number(inv.ilpBidOfferSpread||5)/100 : 0;
+  const monthlyFee = Number(inv.ilpMonthlyFee||5);
+  const accountLabel = inIUA ? 'IUA (month '+(monthsElapsed+1)+' of '+iuaMonths+')' : 'AUA';
+
+  // Funds with an active allocation %
+  const activeFunds = (inv.funds||[]).filter(function(f){ return Number(f.allocationPct||0) > 0; });
+  if(!activeFunds.length){
+    toast('No funds have a Premium Allocation % set. Re-import the Policy Funds CSV (with Replace all) so allocation %s are loaded.','warn');
+    return;
+  }
+
+  // Calculate new units per fund
+  const allocs = activeFunds.map(function(f){
+    const bidNav = Number(f.latestNav||f.purchaseNav||0);
+    const offerNav = inIUA && spread > 0 ? bidNav/(1-spread) : bidNav;
+    const amt = premium * (allocRate/100) * (Number(f.allocationPct)/100);
+    const newUnits = offerNav > 0 ? amt/offerNav : 0;
+    return { f:f, amt:amt, newUnits:parseFloat(newUnits.toFixed(6)), bidNav:bidNav, offerNav:parseFloat(offerNav.toFixed(6)) };
+  });
+  const totalAmt = allocs.reduce(function(s,r){ return s+r.amt; },0);
+
+  // Monthly policy fee: deduct from the SGD fund with most units × nav
+  const feeSource = (inv.funds||[]).filter(function(f){ return (f.currency||'SGD').toUpperCase()==='SGD' && Number(f.units||0)>0 && Number(f.latestNav||f.purchaseNav||0)>0; })
+    .sort(function(a,b){ return Number(b.units||0)*Number(b.latestNav||b.purchaseNav||0) - Number(a.units||0)*Number(a.latestNav||a.purchaseNav||0); })[0]||null;
+  const feeUnits = feeSource ? parseFloat((monthlyFee/Number(feeSource.latestNav||feeSource.purchaseNav)).toFixed(6)) : 0;
+
+  const tableRows = allocs.map(function(r){
+    return '<tr><td>'+esc(r.f.name.length>30?r.f.name.slice(0,30)+'…':r.f.name)+'</td>'
+      +'<td style="text-align:right;">'+r.f.allocationPct+'%</td>'
+      +'<td style="text-align:right;">SGD '+fmtMoney(r.amt)+'</td>'
+      +'<td style="text-align:right;color:var(--green);">+'+r.newUnits.toFixed(4)+'</td></tr>';
+  }).join('');
+
+  showModal('<div class="modal-header"><h3>Apply Monthly Premium</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
+    +'<p style="font-size:13px;color:var(--ink-faint);margin:0 0 4px;">Premium: <strong style="color:var(--ink);">SGD '+fmtMoney(premium)+'</strong> &nbsp;·&nbsp; Account: <strong style="color:var(--ink);">'+accountLabel+'</strong> &nbsp;·&nbsp; Alloc rate: <strong style="color:var(--ink);">'+allocRate+'%</strong>'+(inIUA?' &nbsp;·&nbsp; Bid-offer: <strong style="color:var(--ink);">'+Number(inv.ilpBidOfferSpread||5)+'%</strong>':'')+'</p>'
+    +'<p style="font-size:11px;color:var(--ink-faint);margin:0 0 12px;">Total allocated: SGD '+fmtMoney(totalAmt)+'</p>'
+    +'<table class="fund-table" style="margin-bottom:10px;"><thead><tr><th>Fund</th><th style="text-align:right;">Alloc%</th><th style="text-align:right;">Amount</th><th style="text-align:right;">New Units</th></tr></thead>'
+    +'<tbody>'+tableRows+'</tbody></table>'
+    +(feeSource?'<div style="font-size:12px;color:var(--amber);padding:8px 10px;background:rgba(245,158,11,0.08);border-radius:6px;margin-bottom:14px;">Policy fee: SGD '+fmtMoney(monthlyFee)+' deducted from '+esc(feeSource.name.length>30?feeSource.name.slice(0,30)+'…':feeSource.name)+' &nbsp;(−'+feeUnits.toFixed(4)+' units)</div>':'')
+    +'<div style="font-size:12px;color:var(--ink-faint);margin-bottom:14px;">Units are estimated from live NAV. Actual HSBC allocation may differ by a few units due to rounding.</div>'
+    +'<div style="display:flex;gap:10px;justify-content:flex-end;">'
+    +'<button class="btn btn-sm" data-action="close-modal">Cancel</button>'
+    +'<button class="btn btn-primary" id="confirmPremBtn">Confirm &amp; Apply</button>'
+    +'</div>');
+
+  document.getElementById('confirmPremBtn').onclick = async function(){
+    allocs.forEach(function(r){ r.f.units = parseFloat((Number(r.f.units||0)+r.newUnits).toFixed(6)); });
+    if(feeSource && feeUnits>0) feeSource.units = parseFloat((Number(feeSource.units||0)-feeUnits).toFixed(6));
+    inv.ilpLastPremiumApplied = today.toISOString().slice(0,10);
+    await saveOneInvestment(inv);
+    closeModal();
+    toast('Monthly premium applied — units updated.');
+    if(view.type==='investment-detail') render();
+  };
+}
+
 function openInvestmentForm(id){
   const inv = id ? investments.find(function(i){ return i.id === id; }) : null;
   editingInvestment = inv ? inv.id : null;
@@ -1801,6 +1882,18 @@ function openInvestmentForm(id){
     +'</div>'
     +'<div style="font-size:11px;color:var(--ink-faint);margin-top:6px;" id="invCashValNote">'+(inv && inv.cashValueSource === 'manual' ? '&#9998; Manual override — auto-refresh will not overwrite. <a href="#" id="resetCashAuto" style="color:var(--blue);">Reset to auto</a>' : (inv && inv.cashValueSource === 'auto' ? '&#x2713; Auto-calculated from NAV + live FX rates' : 'Will be calculated automatically on next NAV refresh.'))+'</div>'
     +'</div>'
+    +'<div style="margin-top:14px;padding:12px;background:var(--surface);border-radius:8px;border:1px solid var(--line);">'
+    +'<div style="font-size:12px;font-weight:600;margin-bottom:10px;">Monthly Premium Auto-Apply <span style="font-weight:400;color:var(--ink-faint);">— set once, then one click each month updates unit counts automatically</span></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    +'<label>Monthly Premium (SGD)<input name="ilpMonthlyPremium" type="number" step="0.01" min="0" value="'+esc(inv&&inv.ilpMonthlyPremium?String(inv.ilpMonthlyPremium):'')+'" placeholder="e.g. 700"></label>'
+    +'<label>Policy Start Date<input name="ilpPolicyStartDate" type="date" value="'+esc(inv&&inv.ilpPolicyStartDate?inv.ilpPolicyStartDate:'')+'" ></label>'
+    +'<label>IUA Period (months)<input name="ilpIuaPeriodMonths" type="number" min="0" value="'+esc(inv&&inv.ilpIuaPeriodMonths!=null?String(inv.ilpIuaPeriodMonths):'18')+'" placeholder="e.g. 18"></label>'
+    +'<label>Monthly Policy Fee (SGD)<input name="ilpMonthlyFee" type="number" step="0.01" min="0" value="'+esc(inv&&inv.ilpMonthlyFee!=null?String(inv.ilpMonthlyFee):'5')+'" placeholder="e.g. 5"></label>'
+    +'<label>IUA Allocation Rate (%)<input name="ilpAllocationRateIUA" type="number" step="0.1" min="0" value="'+esc(inv&&inv.ilpAllocationRateIUA!=null?String(inv.ilpAllocationRateIUA):'120')+'" placeholder="e.g. 120"></label>'
+    +'<label>AUA Allocation Rate (%)<input name="ilpAllocationRateAUA" type="number" step="0.1" min="0" value="'+esc(inv&&inv.ilpAllocationRateAUA!=null?String(inv.ilpAllocationRateAUA):'100')+'" placeholder="e.g. 100"></label>'
+    +'<label>Bid-Offer Spread IUA (%)<input name="ilpBidOfferSpread" type="number" step="0.1" min="0" value="'+esc(inv&&inv.ilpBidOfferSpread!=null?String(inv.ilpBidOfferSpread):'5')+'" placeholder="e.g. 5"></label>'
+    +'<label>Premium Day of Month<input name="ilpPremiumDay" type="number" min="1" max="28" value="'+esc(inv&&inv.ilpPremiumDay?String(inv.ilpPremiumDay):'1')+'" placeholder="e.g. 1"></label>'
+    +'</div></div>'
     +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">'
     +'<button type="button" class="btn btn-sm" data-action="close-modal">Cancel</button>'
     +'<button type="submit" class="btn btn-primary">Save Portfolio</button>'
@@ -1841,7 +1934,16 @@ function openInvestmentForm(id){
     const rawCV = fd.get('cashValue'); const cvNum = rawCV ? parseFloat(rawCV) : 0;
     const prevCV = inv ? Number(inv.cashValue||0) : 0;
     const cvSource = cvNum && cvNum !== prevCV ? 'manual' : (inv ? (inv.cashValueSource||'auto') : 'auto');
-    const fields = { clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), linkedPolicyId: linkedPolicyId, cashValue: cvNum||0, cashValueDate: fd.get('cashValueDate')||'', cashValueSource: cvSource };
+    const fields = { clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), linkedPolicyId: linkedPolicyId, cashValue: cvNum||0, cashValueDate: fd.get('cashValueDate')||'', cashValueSource: cvSource,
+      ilpMonthlyPremium: parseFloat(fd.get('ilpMonthlyPremium'))||0,
+      ilpPolicyStartDate: fd.get('ilpPolicyStartDate')||'',
+      ilpIuaPeriodMonths: parseInt(fd.get('ilpIuaPeriodMonths'))||18,
+      ilpAllocationRateIUA: parseFloat(fd.get('ilpAllocationRateIUA'))||120,
+      ilpAllocationRateAUA: parseFloat(fd.get('ilpAllocationRateAUA'))||100,
+      ilpBidOfferSpread: parseFloat(fd.get('ilpBidOfferSpread'))||5,
+      ilpMonthlyFee: parseFloat(fd.get('ilpMonthlyFee'))||5,
+      ilpPremiumDay: parseInt(fd.get('ilpPremiumDay'))||1,
+    };
     if(inv){
       Object.assign(inv, fields);
       await saveOneInvestment(inv);
@@ -1966,6 +2068,7 @@ document.addEventListener('click', async (e) => {
   else if(action === 'refresh-prices'){ refreshPrices(id, false); }
   else if(action === 'refresh-all-prices'){ refreshAllPrices(); }
   else if(action === 'open-import-csv'){ openImportCSV(id); }
+  else if(action === 'apply-premium'){ openApplyPremiumModal(id); }
   else if(action === 'delete-transaction'){ deleteTransaction(t.dataset.inv, t.dataset.tx); }
 });
 
