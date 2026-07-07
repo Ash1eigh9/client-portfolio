@@ -1122,6 +1122,41 @@ async function deleteOneInvestment(id){
 }
 
 /* ============================== INVESTMENTS — NAV REFRESH ============================== */
+
+// Confirmed correct ISINs + currencies for HSBC Life SG ILP funds, verified against
+// fundprices.insurance.hsbc.com.sg.  Keyed by lowercase fund-name fragment so partial
+// matches work (e.g. "blackrock world healthscience fund (usd)" still matches).
+const HSBC_ISIN_MAP = [
+  { match: 'amundi funds cash usd',      isin: 'LU0568621618', currency: 'USD' },
+  { match: 'amundi fds cash usd',        isin: 'LU0568621618', currency: 'USD' },
+  { match: 'blackrock world healthscience', isin: 'LU0122379950', currency: 'USD' },
+  { match: 'bgf world healthscience',    isin: 'LU0122379950', currency: 'USD' },
+  { match: 'jpm greater china',          isin: 'LU0210526801', currency: 'USD' },
+  { match: 'jpmorgan greater china',     isin: 'LU0210526801', currency: 'USD' },
+  { match: 'pimco gis income',           isin: 'IE00B91RQ825', currency: 'SGD' },
+  { match: 'franklin india',             isin: 'LU0536402901', currency: 'SGD' },
+  { match: 'united sgd fund',            isin: 'SG9999001382', currency: 'SGD' },
+  { match: 'ab low volatility equity',   isin: 'LU0861579265', currency: 'USD' },
+];
+
+// Auto-correct any fund whose stored ISIN / currency doesn't match the confirmed table.
+// Returns true if anything changed (so the caller knows to save).
+function fixFundIsins(inv){
+  var changed = false;
+  (inv.funds || []).forEach(function(f){
+    var nameLower = (f.name || '').toLowerCase();
+    for(var i = 0; i < HSBC_ISIN_MAP.length; i++){
+      var entry = HSBC_ISIN_MAP[i];
+      if(nameLower.indexOf(entry.match) !== -1){
+        if(f.isin !== entry.isin){ f.isin = entry.isin; changed = true; }
+        if((f.currency || '').toUpperCase() !== entry.currency){ f.currency = entry.currency; changed = true; }
+        break;
+      }
+    }
+  });
+  return changed;
+}
+
 async function fetchFxRates(){
   // open.er-api.com is free, CORS-enabled, no key needed — returns rates vs SGD base
   try{
@@ -1166,6 +1201,7 @@ function computeAutoCashValue(inv, fxRates){
 async function refreshPrices(invId, silent){
   const inv = investments.find(i => i.id === invId);
   if(!inv || !inv.funds || !inv.funds.length) return;
+  fixFundIsins(inv); // auto-correct any known-wrong ISINs / currencies before fetching
   const symbols = inv.funds.filter(f => f.isin && f.currency).map(f => `${f.isin}:${f.currency}`);
   const btn = document.querySelector(`[data-action="refresh-prices"][data-id="${invId}"]`);
   if(btn) btn.querySelector('svg')?.classList.add('spinning');
