@@ -1251,13 +1251,24 @@ async function refreshPrices(invId, silent){
   }
 }
 
-async function refreshAllPrices(){
+async function refreshAllPrices(silent){
   const btn = document.querySelector('[data-action="refresh-all-prices"]');
   if(btn){ btn.disabled = true; btn.querySelector('svg')?.classList.add('spinning'); }
   await Promise.allSettled(investments.map(inv => refreshPrices(inv.id, true)));
   if(btn){ btn.disabled = false; btn.querySelector('svg')?.classList.remove('spinning'); }
-  toast('All portfolios refreshed.');
+  if(!silent) toast('All portfolios refreshed.');
   if(view.type === 'investments' || view.type === 'investment-detail') render();
+}
+
+function autoRefreshIfStale(){
+  if(!investments.length) return;
+  const today = new Date().toISOString().slice(0,10);
+  const stale = investments.some(function(inv){
+    if(!inv.funds || !inv.funds.length) return false;
+    if(!inv.lastRefreshed) return true;
+    return new Date(inv.lastRefreshed).toISOString().slice(0,10) !== today;
+  });
+  if(stale) refreshAllPrices(true);
 }
 
 /* ============================== INVESTMENTS — RENDER ============================== */
@@ -1962,7 +1973,7 @@ document.addEventListener('click', async (e) => {
 (async function init(){
   if(!FB_READY){
     // Firebase not configured yet — run offline with localStorage
-    render(); await loadData(); render();
+    render(); await loadData(); render(); autoRefreshIfStale();
     return;
   }
   // Show login screen while we wait for auth state
@@ -1990,6 +2001,7 @@ document.addEventListener('click', async (e) => {
       render();
       await loadData();
       render();
+      autoRefreshIfStale();
     } else {
       currentUser = null;
       dataLoaded = false;
