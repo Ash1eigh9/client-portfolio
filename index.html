@@ -411,14 +411,25 @@ let editingInvestment = null;
 let investments = [];
 let dataLoaded = false;
 const WORKER_URL = 'https://silent-moon-f65a.chong-eanqi121.workers.dev';
-const HSBC_ILP_PRODUCTS = ['Pulsar','Wealth Voyage','Wealth Harvest','Wealth Accelerate'];
+// Grouped product catalog for the portfolio form.
+// Each entry: { insurer, name } — insurer is used as the <optgroup> label.
+const ILP_PRODUCTS = [
+  { insurer: 'HSBC Life',    name: 'Pulsar' },
+  { insurer: 'HSBC Life',    name: 'Wealth Voyage' },
+  { insurer: 'HSBC Life',    name: 'Wealth Harvest' },
+  { insurer: 'HSBC Life',    name: 'Wealth Accelerate' },
+  { insurer: 'NTUC Income',  name: 'Income Flex Vantage' },
+];
+// Keep the flat list alias for any legacy references
+const HSBC_ILP_PRODUCTS = ILP_PRODUCTS.map(function(p){ return p.name; });
 
 // Per-product ILP charge defaults — used in the Edit Portfolio form and auto-migration.
 const ILP_PRODUCT_DEFAULTS = {
-  'Pulsar':            { ilpAllocationRateIUA: 168, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 18 },
-  'Wealth Voyage':     { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
-  'Wealth Harvest':    { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
-  'Wealth Accelerate': { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 0, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
+  'Pulsar':               { ilpAllocationRateIUA: 168, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 18 },
+  'Wealth Voyage':        { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
+  'Wealth Harvest':       { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
+  'Wealth Accelerate':    { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 0, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
+  'Income Flex Vantage':  { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 0, ilpMonthlyFee: 0, ilpIuaPeriodMonths: 0 },
 };
 
 const CAT_PALETTE = ['#2F6F5E','#3D5A80','#9C6644','#6B4E71','#4C7A4C','#8A5A44','#5B7B9A','#B8742B','#7A5C61','#4F6D7A'];
@@ -1923,9 +1934,18 @@ function openInvestmentForm(id){
     + clients.slice().sort(function(a,b){ return a.name.localeCompare(b.name); }).map(function(c){
       return '<option value="'+esc(c.id)+'"'+(inv && inv.clientId === c.id ? ' selected' : '')+'>'+esc(c.name)+'</option>';
     }).join('');
-  const productOpts = HSBC_ILP_PRODUCTS.map(function(p){
-    return '<option value="'+esc(p)+'"'+(inv && inv.product === p ? ' selected' : '')+'>'+esc(p)+'</option>';
-  }).join('');
+  const productOpts = (function(){
+    const groups = {};
+    ILP_PRODUCTS.forEach(function(p){
+      if(!groups[p.insurer]) groups[p.insurer] = [];
+      groups[p.insurer].push(p.name);
+    });
+    return Object.keys(groups).map(function(insurer){
+      return '<optgroup label="'+esc(insurer)+'">'+groups[insurer].map(function(n){
+        return '<option value="'+esc(n)+'"'+(inv && inv.product === n ? ' selected' : '')+'>'+esc(n)+'</option>';
+      }).join('')+'</optgroup>';
+    }).join('');
+  })();
   // auto-detect linked policy if not explicitly set
   var autoLinkedId = inv ? (inv.linkedPolicyId||'') : '';
   if(inv && !autoLinkedId && inv.clientId){
@@ -1948,7 +1968,7 @@ function openInvestmentForm(id){
     +'<label>Client<select name="clientId" id="invClientSel" required style="margin-top:4px;">'+clientOpts+'</select></label>'
     +'<label style="margin-top:12px;">Linked Policy<select name="linkedPolicyId" id="invPolicySel" style="margin-top:4px;">'+initPolicyOpts+'</select>'
     +'<div id="invPremCalc" style="font-size:12px;color:var(--ink-faint);margin-top:5px;min-height:16px;"></div></label>'
-    +'<label style="margin-top:12px;">HSBC ILP Product<select name="product" required style="margin-top:4px;">'+productOpts+'</select></label>'
+    +'<label style="margin-top:12px;">Product<select name="product" required style="margin-top:4px;">'+productOpts+'</select></label>'
     +'<label style="margin-top:12px;">Policy Number <span style="font-size:11px;color:var(--ink-faint);">(auto-filled from policy)</span><input name="policyNo" id="invPolicyNo" value="'+esc(inv ? inv.policyNo||'' : '')+'" placeholder="e.g. P12345678"></label>'
     +'<div style="margin-top:14px;padding:12px;background:var(--surface);border-radius:8px;border:1px solid var(--line);">'
     +'<div style="font-size:12px;font-weight:600;margin-bottom:8px;">Cash Value (SGD) <span style="font-weight:400;color:var(--ink-faint);">— auto-calculated on NAV refresh · override if needed</span></div>'
