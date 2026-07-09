@@ -418,17 +418,25 @@ const ILP_PRODUCTS = [
   { insurer: 'HSBC Life',    name: 'Wealth Voyage' },
   { insurer: 'HSBC Life',    name: 'Wealth Harvest' },
   { insurer: 'HSBC Life',    name: 'Wealth Accelerate' },
+  { insurer: 'NTUC Income',  name: 'Invest Flex' },
   { insurer: 'NTUC Income',  name: 'Income Flex Vantage' },
 ];
 // Keep the flat list alias for any legacy references
 const HSBC_ILP_PRODUCTS = ILP_PRODUCTS.map(function(p){ return p.name; });
 
-// Per-product ILP charge defaults — used in the Edit Portfolio form and auto-migration.
+// Per-product ILP charge defaults.
+// For Invest Flex (Income Insurance / NTUC Income):
+//   - Allocation: 100% months 1-120, 102% months 121-240, 105% month 241+
+//   - No bid-offer spread (buys at bid price directly)
+//   - No fixed monthly fee — policy fee is 2.5% p.a. of policy value yrs 1-10,
+//     then 0.5% p.a. (deducted monthly by cancelling units; tracked separately)
+//   - No IUA/AUA split — ilpIuaPeriodMonths=120 repurposed as "tier-1 period"
 const ILP_PRODUCT_DEFAULTS = {
   'Pulsar':               { ilpAllocationRateIUA: 168, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 18 },
   'Wealth Voyage':        { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
   'Wealth Harvest':       { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
   'Wealth Accelerate':    { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 0, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
+  'Invest Flex':          { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 102, ilpBidOfferSpread: 0, ilpMonthlyFee: 0, ilpIuaPeriodMonths: 120 },
   'Income Flex Vantage':  { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 0, ilpMonthlyFee: 0, ilpIuaPeriodMonths: 0 },
 };
 
@@ -1861,7 +1869,7 @@ function openApplyPremiumModal(invId){
   const premium = Number(inv.ilpMonthlyPremium||0);
   if(!premium){ toast('Set the Monthly Premium in Edit Portfolio first.','warn'); return; }
 
-  // Determine IUA or AUA based on months elapsed since policy start
+  // Determine allocation rate and account label based on months elapsed since policy start
   const startDate = inv.ilpPolicyStartDate ? new Date(inv.ilpPolicyStartDate) : null;
   const iuaMonths = Number(inv.ilpIuaPeriodMonths||18);
   const today = new Date();
@@ -1869,11 +1877,31 @@ function openApplyPremiumModal(invId){
   if(startDate){
     monthsElapsed = (today.getFullYear()-startDate.getFullYear())*12 + (today.getMonth()-startDate.getMonth());
   }
-  const inIUA = startDate && monthsElapsed < iuaMonths;
-  const allocRate = inIUA ? Number(inv.ilpAllocationRateIUA||120) : Number(inv.ilpAllocationRateAUA||100);
-  const spread = inIUA ? Number(inv.ilpBidOfferSpread||5)/100 : 0;
-  const monthlyFee = Number(inv.ilpMonthlyFee||5);
-  const accountLabel = inIUA ? 'IUA (month '+(monthsElapsed+1)+' of '+iuaMonths+')' : 'AUA';
+
+  // Invest Flex has a 3-tier allocation rate; no IUA/AUA split, no bid-offer spread
+  const isInvestFlex = inv.product === 'Invest Flex';
+  let allocRate, spread, accountLabel, inIUA;
+  if(isInvestFlex){
+    // Tier 1: months 1-120 → 100%, Tier 2: months 121-240 → 102%, Tier 3: month 241+ → 105%
+    if(monthsElapsed < 120){
+      allocRate = 100;
+      accountLabel = 'Year 1-10 · 100% allocation (month '+(monthsElapsed+1)+')';
+    } else if(monthsElapsed < 240){
+      allocRate = 102;
+      accountLabel = 'Year 11-20 · 102% allocation (month '+(monthsElapsed+1)+')';
+    } else {
+      allocRate = 105;
+      accountLabel = 'Year 21+ · 105% allocation (month '+(monthsElapsed+1)+')';
+    }
+    spread = 0;
+    inIUA = false;
+  } else {
+    inIUA = startDate && monthsElapsed < iuaMonths;
+    allocRate = inIUA ? Number(inv.ilpAllocationRateIUA||120) : Number(inv.ilpAllocationRateAUA||100);
+    spread = inIUA ? Number(inv.ilpBidOfferSpread||5)/100 : 0;
+    accountLabel = inIUA ? 'IUA (month '+(monthsElapsed+1)+' of '+iuaMonths+')' : 'AUA';
+  }
+  const monthlyFee = Number(inv.ilpMonthlyFee||0);
 
   // Funds with an active allocation %
   const activeFunds = (inv.funds||[]).filter(function(f){ return Number(f.allocationPct||0) > 0; });
@@ -1910,7 +1938,7 @@ function openApplyPremiumModal(invId){
     +'<table class="fund-table" style="margin-bottom:10px;"><thead><tr><th>Fund</th><th style="text-align:right;">Alloc%</th><th style="text-align:right;">Amount</th><th style="text-align:right;">New Units</th></tr></thead>'
     +'<tbody>'+tableRows+'</tbody></table>'
     +(feeSource?'<div style="font-size:12px;color:var(--amber);padding:8px 10px;background:rgba(245,158,11,0.08);border-radius:6px;margin-bottom:14px;">Policy fee: SGD '+fmtMoney(monthlyFee)+' deducted from '+esc(feeSource.name.length>30?feeSource.name.slice(0,30)+'…':feeSource.name)+' &nbsp;(−'+feeUnits.toFixed(4)+' units)</div>':'')
-    +'<div style="font-size:12px;color:var(--ink-faint);margin-bottom:14px;">Units are estimated from live NAV. Actual HSBC allocation may differ by a few units due to rounding.</div>'
+    +'<div style="font-size:12px;color:var(--ink-faint);margin-bottom:14px;">Units are estimated from live NAV. Actual insurer allocation may differ slightly due to rounding.'+(isInvestFlex ? ' Invest Flex policy fee (2.5% p.a. yrs 1-10, 0.5% p.a. yr 11+) is deducted by Income automatically — not shown here.' : '')+'</div>'
     +'<div style="display:flex;gap:10px;justify-content:flex-end;">'
     +'<button class="btn btn-sm" data-action="close-modal">Cancel</button>'
     +'<button class="btn btn-primary" id="confirmPremBtn">Confirm &amp; Apply</button>'
@@ -1983,11 +2011,11 @@ function openInvestmentForm(id){
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
     +'<label>Monthly Premium (SGD)<input name="ilpMonthlyPremium" type="number" step="0.01" min="0" value="'+esc(ilpVal('ilpMonthlyPremium','')||'')+'" placeholder="e.g. 700"></label>'
     +'<label>Policy Start Date<input name="ilpPolicyStartDate" type="date" value="'+esc(ilpVal('ilpPolicyStartDate','')||'')+'"></label>'
-    +'<label>IUA Period (months)<input name="ilpIuaPeriodMonths" type="number" min="0" value="'+esc(ilpVal('ilpIuaPeriodMonths',18))+'" placeholder="e.g. 18"></label>'
-    +'<label>Monthly Policy Fee (SGD)<input name="ilpMonthlyFee" type="number" step="0.01" min="0" value="'+esc(ilpVal('ilpMonthlyFee',5))+'" placeholder="e.g. 5"></label>'
-    +'<label>IUA Allocation Rate (%)<input name="ilpAllocationRateIUA" type="number" step="0.1" min="0" value="'+esc(ilpVal('ilpAllocationRateIUA',100))+'" placeholder="e.g. 168"></label>'
-    +'<label>AUA Allocation Rate (%)<input name="ilpAllocationRateAUA" type="number" step="0.1" min="0" value="'+esc(ilpVal('ilpAllocationRateAUA',100))+'" placeholder="e.g. 100"></label>'
-    +'<label>Bid-Offer Spread IUA (%)<input name="ilpBidOfferSpread" type="number" step="0.1" min="0" value="'+esc(ilpVal('ilpBidOfferSpread',5))+'" placeholder="e.g. 5"></label>'
+    +'<label>IUA / Tier-1 Period (months)<input name="ilpIuaPeriodMonths" type="number" min="0" value="'+esc(ilpVal('ilpIuaPeriodMonths',0))+'" placeholder="e.g. 18 or 120"></label>'
+    +'<label>Monthly Policy Fee (SGD) <span style="font-size:10px;color:var(--ink-faint);">0 if fee is % of value</span><input name="ilpMonthlyFee" type="number" step="0.01" min="0" value="'+esc(ilpVal('ilpMonthlyFee',0))+'" placeholder="e.g. 5"></label>'
+    +'<label>Tier-1 / IUA Allocation Rate (%)<input name="ilpAllocationRateIUA" type="number" step="0.1" min="0" value="'+esc(ilpVal('ilpAllocationRateIUA',100))+'" placeholder="e.g. 168 or 100"></label>'
+    +'<label>Tier-2 / AUA Allocation Rate (%)<input name="ilpAllocationRateAUA" type="number" step="0.1" min="0" value="'+esc(ilpVal('ilpAllocationRateAUA',100))+'" placeholder="e.g. 100 or 102"></label>'
+    +'<label>Bid-Offer Spread (%)<input name="ilpBidOfferSpread" type="number" step="0.1" min="0" value="'+esc(ilpVal('ilpBidOfferSpread',0))+'" placeholder="e.g. 5"></label>'
     +'<label>Premium Day of Month<input name="ilpPremiumDay" type="number" min="1" max="28" value="'+esc(ilpVal('ilpPremiumDay',1))+'" placeholder="e.g. 1"></label>'
     +'</div></div>'
     +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">'
@@ -2044,11 +2072,11 @@ function openInvestmentForm(id){
     const fields = { clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), linkedPolicyId: linkedPolicyId, cashValue: cvNum||0, cashValueDate: fd.get('cashValueDate')||'', cashValueSource: cvSource,
       ilpMonthlyPremium: parseFloat(fd.get('ilpMonthlyPremium'))||0,
       ilpPolicyStartDate: fd.get('ilpPolicyStartDate')||'',
-      ilpIuaPeriodMonths: parseInt(fd.get('ilpIuaPeriodMonths'))||18,
-      ilpAllocationRateIUA: parseFloat(fd.get('ilpAllocationRateIUA'))||120,
-      ilpAllocationRateAUA: parseFloat(fd.get('ilpAllocationRateAUA'))||100,
-      ilpBidOfferSpread: parseFloat(fd.get('ilpBidOfferSpread'))||5,
-      ilpMonthlyFee: parseFloat(fd.get('ilpMonthlyFee'))||5,
+      ilpIuaPeriodMonths: parseInt(fd.get('ilpIuaPeriodMonths')) || 0,
+      ilpAllocationRateIUA: parseFloat(fd.get('ilpAllocationRateIUA')) || 100,
+      ilpAllocationRateAUA: parseFloat(fd.get('ilpAllocationRateAUA')) || 100,
+      ilpBidOfferSpread: parseFloat(fd.get('ilpBidOfferSpread')) || 0,
+      ilpMonthlyFee: fd.get('ilpMonthlyFee') !== '' ? parseFloat(fd.get('ilpMonthlyFee')) : 0,
       ilpPremiumDay: parseInt(fd.get('ilpPremiumDay'))||1,
     };
     if(inv){
