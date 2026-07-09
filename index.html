@@ -1207,6 +1207,27 @@ function computeAutoCashValue(inv, fxRates){
   return hasVal ? { value: parseFloat(total.toFixed(2)), liveCount: liveCount, totalCount: totalCount } : null;
 }
 
+// Returns { notionalCost, allocationBonus } where:
+//   notionalCost     = what was actually allocated (premiums × allocation rate) — the "cost" including bonus units
+//   allocationBonus  = notionalCost − premiumsPaid — the structural benefit from >100% allocation
+// Returns null if the policy doesn't have enough ILP charge data configured.
+function computeAllocationBonus(inv, premiumsPaid){
+  if(!inv.ilpMonthlyPremium || !inv.ilpPolicyStartDate || !premiumsPaid) return null;
+  const startDate = new Date(inv.ilpPolicyStartDate);
+  const now = new Date();
+  const totalMonths = Math.round((now.getFullYear()-startDate.getFullYear())*12 + (now.getMonth()-startDate.getMonth()));
+  if(totalMonths <= 0) return null;
+  const iuaMonths   = Number(inv.ilpIuaPeriodMonths || 18);
+  const iuaRate     = Number(inv.ilpAllocationRateIUA || 168) / 100;
+  const auaRate     = Number(inv.ilpAllocationRateAUA || 100) / 100;
+  const monthly     = Number(inv.ilpMonthlyPremium);
+  const iuaActual   = Math.min(totalMonths, iuaMonths);
+  const auaActual   = Math.max(0, totalMonths - iuaMonths);
+  const notionalCost    = parseFloat(((iuaActual * monthly * iuaRate) + (auaActual * monthly * auaRate)).toFixed(2));
+  const allocationBonus = parseFloat((notionalCost - premiumsPaid).toFixed(2));
+  return { notionalCost, allocationBonus };
+}
+
 async function refreshPrices(invId, silent){
   const inv = investments.find(i => i.id === invId);
   if(!inv || !inv.funds || !inv.funds.length) return;
@@ -1478,7 +1499,27 @@ function renderInvestmentDetail(main){
       ? '<div class="card" style="padding:16px 20px;min-width:160px;border:1px solid var(--line);"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Account Value (SGD)</div><div style="font-size:22px;font-weight:700;margin-top:4px;">SGD '+fmtMoney(displayCashVal)+'</div><div style="font-size:11px;color:'+(inv.cashValueSource!=='manual' && navTotalCount && navLiveCount < navTotalCount ? 'var(--amber)' : 'var(--ink-faint)')+';margin-top:2px;">'+(Number(inv.cashValue||0) > 0 ? (inv.cashValueSource==='manual' ? 'Manual — from HSBC portal' : ('Auto-estimate · units × NAV × live FX'+(navTotalCount ? ' · '+navLiveCount+'/'+navTotalCount+' funds live-priced' : '')))+(inv.cashValueDate ? ' · '+esc(inv.cashValueDate) : '') : (hasAnyNav ? 'Based on latest NAV' : 'Refresh NAV to calculate'))+'</div></div>'
       : '')
     +(displayCashVal > 0 && premiumsDisplay
-      ? '<div class="card" style="padding:16px 20px;min-width:160px;"><div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Overall Gain / Loss (SGD)</div><div style="font-size:22px;font-weight:700;margin-top:4px;" class="'+perfClass(gainSGD)+'">'+(gainSGD>=0?'+':'')+fmtMoney(gainSGD)+'</div><div style="font-size:13px;margin-top:2px;" class="'+perfClass(gainSGD)+'">'+fmtPct(gainSGDPct)+'</div></div>'
+      ? (function(){
+          const bonus = computeAllocationBonus(inv, premiumsDisplay);
+          const gainWithBonus = gainSGD; // displayCashVal - premiumsDisplay
+          const fundGain = bonus ? parseFloat((displayCashVal - bonus.notionalCost).toFixed(2)) : null;
+          const fundGainPct = bonus && bonus.notionalCost ? fundGain / bonus.notionalCost * 100 : null;
+          return '<div class="card" style="padding:16px 20px;min-width:200px;">'
+            +'<div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Overall Gain / Loss (SGD)</div>'
+            +'<div style="font-size:22px;font-weight:700;margin-top:4px;" class="'+perfClass(gainWithBonus)+'">'+(gainWithBonus>=0?'+':'')+fmtMoney(gainWithBonus)+'</div>'
+            +'<div style="font-size:13px;margin-top:2px;" class="'+perfClass(gainWithBonus)+'">'+fmtPct(gainSGDPct)+' <span style="font-weight:400;font-size:11px;color:var(--ink-faint);">incl. allocation bonus</span></div>'
+            +(bonus
+              ? '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;">'
+                +'<div><div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.4px;">Allocation Bonus</div>'
+                +'<div style="font-size:14px;font-weight:700;" class="'+perfClass(bonus.allocationBonus)+'">'+(bonus.allocationBonus>=0?'+':'')+fmtMoney(bonus.allocationBonus)+'</div>'
+                +'<div style="font-size:11px;color:var(--ink-faint);">'+fmtPct(bonus.allocationBonus/premiumsDisplay*100)+' of premiums</div></div>'
+                +'<div><div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.4px;">Fund Performance</div>'
+                +'<div style="font-size:14px;font-weight:700;" class="'+perfClass(fundGain)+'">'+(fundGain>=0?'+':'')+fmtMoney(fundGain)+'</div>'
+                +'<div style="font-size:11px;color:var(--ink-faint);">'+fmtPct(fundGainPct)+' on allocated cost</div></div>'
+                +'</div>'
+              : '')
+            +'</div>';
+        })()
       : '')
     +'</div>'
     +'<h3 style="margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);">Fund Holdings</h3>'
@@ -1625,6 +1666,7 @@ function openImportCSV(invId){
     if(importType === 'holdings'){
       if(!inv.funds) inv.funds = [];
       const replaceAll = !!(document.getElementById('replaceAllFunds') && document.getElementById('replaceAllFunds').checked);
+      const oldFunds = inv.funds.slice(); // preserve for costSGD/purchaseNav lookup even on replace-all
       if(replaceAll) inv.funds = [];
       // Two-pass: collect rows into a map first, summing units for duplicate fund names
       // (handles IUA + AUA sections in HSBC Policy Funds CSV — same fund appears twice)
@@ -1651,18 +1693,20 @@ function openImportCSV(invId){
       tempOrder.forEach(function(key){
         const fd = tempMap[key];
         const existing = inv.funds.find(function(f){ return (fd.isin && f.isin && f.isin===fd.isin) || f.name.toLowerCase()===fd.name.toLowerCase(); });
+        // Also check pre-clear funds so replace-all preserves historical costSGD/purchaseNav
+        const prior = existing || oldFunds.find(function(f){ return (fd.isin && f.isin && f.isin===fd.isin) || f.name.toLowerCase()===fd.name.toLowerCase(); });
         const fdata = {
-          id: existing ? existing.id : uid(),
+          id: existing ? existing.id : (prior ? prior.id : uid()),
           name: fd.name,
-          isin: fd.isin || (existing ? existing.isin||'' : ''),
-          currency: fd.currency || (existing ? existing.currency||'USD' : 'USD'),
+          isin: fd.isin || (prior ? prior.isin||'' : ''),
+          currency: fd.currency || (prior ? prior.currency||'USD' : 'USD'),
           units: fd.units,
-          purchaseNav: fd.purchaseNav || (existing ? existing.purchaseNav||0 : 0),
-          costSGD: existing ? existing.costSGD||0 : 0,
-          latestNav: fd.latestNav || (existing ? existing.latestNav||null : null),
-          allocationPct: fd.allocationPct || (existing ? existing.allocationPct||null : null),
-          navDate: existing ? existing.navDate||null : null,
-          navName: existing ? existing.navName||null : null,
+          purchaseNav: fd.purchaseNav || (prior ? prior.purchaseNav||0 : 0),
+          costSGD: prior ? prior.costSGD||0 : 0,
+          latestNav: fd.latestNav || (prior ? prior.latestNav||null : null),
+          allocationPct: fd.allocationPct || (prior ? prior.allocationPct||null : null),
+          navDate: prior ? prior.navDate||null : null,
+          navName: prior ? prior.navName||null : null,
         };
         if(existing){ const idx=inv.funds.findIndex(function(f){ return f.id===existing.id; }); inv.funds[idx]=fdata; updated++; }
         else { inv.funds.push(fdata); added++; }
