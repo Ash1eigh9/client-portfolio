@@ -413,6 +413,14 @@ let dataLoaded = false;
 const WORKER_URL = 'https://silent-moon-f65a.chong-eanqi121.workers.dev';
 const HSBC_ILP_PRODUCTS = ['Pulsar','Wealth Voyage','Wealth Harvest','Wealth Accelerate'];
 
+// Per-product ILP charge defaults — used in the Edit Portfolio form and auto-migration.
+const ILP_PRODUCT_DEFAULTS = {
+  'Pulsar':            { ilpAllocationRateIUA: 168, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 18 },
+  'Wealth Voyage':     { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
+  'Wealth Harvest':    { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 5, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
+  'Wealth Accelerate': { ilpAllocationRateIUA: 100, ilpAllocationRateAUA: 100, ilpBidOfferSpread: 0, ilpMonthlyFee: 5, ilpIuaPeriodMonths: 0 },
+};
+
 const CAT_PALETTE = ['#2F6F5E','#3D5A80','#9C6644','#6B4E71','#4C7A4C','#8A5A44','#5B7B9A','#B8742B','#7A5C61','#4F6D7A'];
 
 const PRODUCT_CATALOG = [
@@ -1260,6 +1268,24 @@ async function refreshAllPrices(silent){
   if(view.type === 'investments' || view.type === 'investment-detail') render();
 }
 
+async function migrateIlpDefaults(){
+  // One-time fix: apply product-specific ILP defaults to any investment that
+  // has never had them set (or had the wrong placeholder value of 120).
+  var dirty = [];
+  investments.forEach(function(inv){
+    const pd = ILP_PRODUCT_DEFAULTS[inv.product];
+    if(!pd) return;
+    var changed = false;
+    Object.keys(pd).forEach(function(k){
+      if(inv[k] == null || (k==='ilpAllocationRateIUA' && inv[k]===120)){
+        inv[k] = pd[k]; changed = true;
+      }
+    });
+    if(changed) dirty.push(inv);
+  });
+  if(dirty.length) await Promise.all(dirty.map(saveOneInvestment));
+}
+
 function autoRefreshIfStale(){
   if(!investments.length) return;
   const today = new Date().toISOString().slice(0,10);
@@ -1867,6 +1893,12 @@ function openInvestmentForm(id){
     if(_found) autoLinkedId = _found.id;
   }
   const initPolicyOpts = inv && inv.clientId ? buildInvPolicyOptions(inv.clientId, autoLinkedId) : '<option value="">— Select client first —</option>';
+  // Resolve ILP charge defaults: stored value → product default → generic fallback
+  function ilpVal(field, genericFallback){
+    if(inv && inv[field] != null) return inv[field];
+    const pd = ILP_PRODUCT_DEFAULTS[inv && inv.product];
+    return pd && pd[field] != null ? pd[field] : genericFallback;
+  }
   showModal('<div class="modal-header"><h3>'+(inv ? 'Edit' : 'Add')+' Portfolio</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
     +'<form id="invForm">'
     +'<label>Client<select name="clientId" id="invClientSel" required style="margin-top:4px;">'+clientOpts+'</select></label>'
@@ -1885,14 +1917,14 @@ function openInvestmentForm(id){
     +'<div style="margin-top:14px;padding:12px;background:var(--surface);border-radius:8px;border:1px solid var(--line);">'
     +'<div style="font-size:12px;font-weight:600;margin-bottom:10px;">Monthly Premium Auto-Apply <span style="font-weight:400;color:var(--ink-faint);">— set once, then one click each month updates unit counts automatically</span></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
-    +'<label>Monthly Premium (SGD)<input name="ilpMonthlyPremium" type="number" step="0.01" min="0" value="'+esc(inv&&inv.ilpMonthlyPremium?String(inv.ilpMonthlyPremium):'')+'" placeholder="e.g. 700"></label>'
-    +'<label>Policy Start Date<input name="ilpPolicyStartDate" type="date" value="'+esc(inv&&inv.ilpPolicyStartDate?inv.ilpPolicyStartDate:'')+'" ></label>'
-    +'<label>IUA Period (months)<input name="ilpIuaPeriodMonths" type="number" min="0" value="'+esc(inv&&inv.ilpIuaPeriodMonths!=null?String(inv.ilpIuaPeriodMonths):'18')+'" placeholder="e.g. 18"></label>'
-    +'<label>Monthly Policy Fee (SGD)<input name="ilpMonthlyFee" type="number" step="0.01" min="0" value="'+esc(inv&&inv.ilpMonthlyFee!=null?String(inv.ilpMonthlyFee):'5')+'" placeholder="e.g. 5"></label>'
-    +'<label>IUA Allocation Rate (%)<input name="ilpAllocationRateIUA" type="number" step="0.1" min="0" value="'+esc(inv&&inv.ilpAllocationRateIUA!=null?String(inv.ilpAllocationRateIUA):'120')+'" placeholder="e.g. 120"></label>'
-    +'<label>AUA Allocation Rate (%)<input name="ilpAllocationRateAUA" type="number" step="0.1" min="0" value="'+esc(inv&&inv.ilpAllocationRateAUA!=null?String(inv.ilpAllocationRateAUA):'100')+'" placeholder="e.g. 100"></label>'
-    +'<label>Bid-Offer Spread IUA (%)<input name="ilpBidOfferSpread" type="number" step="0.1" min="0" value="'+esc(inv&&inv.ilpBidOfferSpread!=null?String(inv.ilpBidOfferSpread):'5')+'" placeholder="e.g. 5"></label>'
-    +'<label>Premium Day of Month<input name="ilpPremiumDay" type="number" min="1" max="28" value="'+esc(inv&&inv.ilpPremiumDay?String(inv.ilpPremiumDay):'1')+'" placeholder="e.g. 1"></label>'
+    +'<label>Monthly Premium (SGD)<input name="ilpMonthlyPremium" type="number" step="0.01" min="0" value="'+esc(ilpVal('ilpMonthlyPremium','')||'')+'" placeholder="e.g. 700"></label>'
+    +'<label>Policy Start Date<input name="ilpPolicyStartDate" type="date" value="'+esc(ilpVal('ilpPolicyStartDate','')||'')+'"></label>'
+    +'<label>IUA Period (months)<input name="ilpIuaPeriodMonths" type="number" min="0" value="'+esc(ilpVal('ilpIuaPeriodMonths',18))+'" placeholder="e.g. 18"></label>'
+    +'<label>Monthly Policy Fee (SGD)<input name="ilpMonthlyFee" type="number" step="0.01" min="0" value="'+esc(ilpVal('ilpMonthlyFee',5))+'" placeholder="e.g. 5"></label>'
+    +'<label>IUA Allocation Rate (%)<input name="ilpAllocationRateIUA" type="number" step="0.1" min="0" value="'+esc(ilpVal('ilpAllocationRateIUA',100))+'" placeholder="e.g. 168"></label>'
+    +'<label>AUA Allocation Rate (%)<input name="ilpAllocationRateAUA" type="number" step="0.1" min="0" value="'+esc(ilpVal('ilpAllocationRateAUA',100))+'" placeholder="e.g. 100"></label>'
+    +'<label>Bid-Offer Spread IUA (%)<input name="ilpBidOfferSpread" type="number" step="0.1" min="0" value="'+esc(ilpVal('ilpBidOfferSpread',5))+'" placeholder="e.g. 5"></label>'
+    +'<label>Premium Day of Month<input name="ilpPremiumDay" type="number" min="1" max="28" value="'+esc(ilpVal('ilpPremiumDay',1))+'" placeholder="e.g. 1"></label>'
     +'</div></div>'
     +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">'
     +'<button type="button" class="btn btn-sm" data-action="close-modal">Cancel</button>'
@@ -1918,6 +1950,17 @@ function openInvestmentForm(id){
   }
   document.getElementById('invClientSel').addEventListener('change', function(){ refreshPolicyDropdown(this.value, ''); });
   document.getElementById('invPolicySel').addEventListener('change', function(){ refreshPremCalc(this.value); });
+  document.querySelector('#invForm select[name="product"]').addEventListener('change', function(){
+    const pd = ILP_PRODUCT_DEFAULTS[this.value];
+    if(!pd) return;
+    // Only fill ILP fields that haven't been manually set (value still at generic fallback 100 or empty)
+    var f = document.getElementById('invForm');
+    if(!inv || !inv.ilpAllocationRateIUA) f.ilpAllocationRateIUA.value = pd.ilpAllocationRateIUA;
+    if(!inv || !inv.ilpAllocationRateAUA) f.ilpAllocationRateAUA.value = pd.ilpAllocationRateAUA;
+    if(!inv || !inv.ilpBidOfferSpread)    f.ilpBidOfferSpread.value    = pd.ilpBidOfferSpread;
+    if(!inv || !inv.ilpMonthlyFee)        f.ilpMonthlyFee.value        = pd.ilpMonthlyFee;
+    if(!inv || !inv.ilpIuaPeriodMonths)   f.ilpIuaPeriodMonths.value   = pd.ilpIuaPeriodMonths;
+  });
   if(autoLinkedId) refreshPremCalc(autoLinkedId, inv ? inv.clientId : '');
   var _resetLink = document.getElementById('resetCashAuto');
   if(_resetLink) _resetLink.addEventListener('click', function(e){
@@ -2104,6 +2147,7 @@ document.addEventListener('click', async (e) => {
       render();
       await loadData();
       render();
+      await migrateIlpDefaults();
       autoRefreshIfStale();
     } else {
       currentUser = null;
