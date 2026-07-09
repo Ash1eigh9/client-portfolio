@@ -1647,7 +1647,7 @@ function openImportCSV(invId){
     +'<div id="replaceAllRow" style="margin:0 0 14px;padding:10px 12px;background:rgba(245,158,11,0.08);border-radius:6px;border:1px solid var(--amber);">'
     +'<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;">'
     +'<input type="checkbox" id="replaceAllFunds" style="width:14px;height:14px;flex-shrink:0;margin-top:1px;">'
-    +'<span><strong>Replace all funds</strong> — clears existing holdings and imports only what is in this file. Use when importing a current policy snapshot (e.g. HSBC Policy Funds CSV) so stale funds are removed.</span>'
+    +'<span><strong>Replace all funds</strong> — clears existing holdings and imports only what is in this file. Use when importing a current policy snapshot (e.g. HSBC Policy Funds CSV or NTUC Income portal export) so stale funds are removed. Supported columns: Fund Name, Units, Portfolio Valuation (or Current NAV), Allocation %, Currency.</span>'
     +'</label></div>'
     +'<label style="font-weight:600;margin-bottom:6px;display:block;">Select CSV file</label>'
     +'<input type="file" id="csvFileInput" accept=".csv,.txt" style="margin-bottom:6px;">'
@@ -1696,7 +1696,10 @@ function openImportCSV(invId){
         const isin = col(r,['isin','isin code','fund code']).toUpperCase();
         const rawUnits = col(r,['units','unit','quantity','no of units','number of units','units held']).replace(/,/g,'');
         const units = parseFloat(rawUnits)||0;
-        const latestNav = parseFloat(col(r,['latest nav','latestnav','current nav','nav','unit price','bid price']).replace(/,/g,''))||0;
+        const portfolioVal = parseFloat(col(r,['portfolio valuation','portfolio value','current value','market value','value']).replace(/[$,]/g,''))||0;
+        let latestNav = parseFloat(col(r,['latest nav','latestnav','current nav','nav','unit price','bid price']).replace(/,/g,''))||0;
+        // Derive NAV from portfolio valuation ÷ units if NAV column absent (e.g. NTUC Income portal export)
+        if(!latestNav && portfolioVal && units > 0) latestNav = parseFloat((portfolioVal / units).toFixed(6));
         const purchaseNav = parseFloat(col(r,['purchase nav','purchasenav','nav at purchase','cost nav','purchase price','average cost','ave cost']).replace(/,/g,''))||0;
         const currency = col(r,['fund currency','currency','ccy'])||'';
         const allocationPct = parseFloat(col(r,['allocation %','allocation','allocationpct','alloc %','alloc','weight %','weight','premium allocation (%)'])||'0')||null;
@@ -1867,7 +1870,9 @@ function openApplyPremiumModal(invId){
   const inv = investments.find(function(i){ return i.id === invId; });
   if(!inv) return;
   const premium = Number(inv.ilpMonthlyPremium||0);
-  if(!premium){ toast('Set the Monthly Premium in Edit Portfolio first.','warn'); return; }
+  const freq = inv.ilpPremiumFrequency || 'monthly';
+  const freqLabel = freq === 'annually' ? 'Annual' : 'Monthly';
+  if(!premium){ toast('Set the Premium Amount in Edit Portfolio first.','warn'); return; }
 
   // Determine allocation rate and account label based on months elapsed since policy start
   const startDate = inv.ilpPolicyStartDate ? new Date(inv.ilpPolicyStartDate) : null;
@@ -1932,8 +1937,8 @@ function openApplyPremiumModal(invId){
       +'<td style="text-align:right;color:var(--green);">+'+r.newUnits.toFixed(4)+'</td></tr>';
   }).join('');
 
-  showModal('<div class="modal-header"><h3>Apply Monthly Premium</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
-    +'<p style="font-size:13px;color:var(--ink-faint);margin:0 0 4px;">Premium: <strong style="color:var(--ink);">SGD '+fmtMoney(premium)+'</strong> &nbsp;·&nbsp; Account: <strong style="color:var(--ink);">'+accountLabel+'</strong> &nbsp;·&nbsp; Alloc rate: <strong style="color:var(--ink);">'+allocRate+'%</strong>'+(inIUA?' &nbsp;·&nbsp; Bid-offer: <strong style="color:var(--ink);">'+Number(inv.ilpBidOfferSpread||5)+'%</strong>':'')+'</p>'
+  showModal('<div class="modal-header"><h3>Apply '+freqLabel+' Premium</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
+    +'<p style="font-size:13px;color:var(--ink-faint);margin:0 0 4px;">Premium: <strong style="color:var(--ink);">SGD '+fmtMoney(premium)+'</strong> &nbsp;·&nbsp; Frequency: <strong style="color:var(--ink);">'+freqLabel+'</strong> &nbsp;·&nbsp; Account: <strong style="color:var(--ink);">'+accountLabel+'</strong> &nbsp;·&nbsp; Alloc rate: <strong style="color:var(--ink);">'+allocRate+'%</strong>'+(inIUA && spread>0?' &nbsp;·&nbsp; Bid-offer: <strong style="color:var(--ink);">'+Number(inv.ilpBidOfferSpread||5)+'%</strong>':'')+'</p>'
     +'<p style="font-size:11px;color:var(--ink-faint);margin:0 0 12px;">Total allocated: SGD '+fmtMoney(totalAmt)+'</p>'
     +'<table class="fund-table" style="margin-bottom:10px;"><thead><tr><th>Fund</th><th style="text-align:right;">Alloc%</th><th style="text-align:right;">Amount</th><th style="text-align:right;">New Units</th></tr></thead>'
     +'<tbody>'+tableRows+'</tbody></table>'
@@ -1950,7 +1955,7 @@ function openApplyPremiumModal(invId){
     inv.ilpLastPremiumApplied = today.toISOString().slice(0,10);
     await saveOneInvestment(inv);
     closeModal();
-    toast('Monthly premium applied — units updated.');
+    toast(freqLabel+' premium applied — units updated.');
     if(view.type==='investment-detail') render();
   };
 }
@@ -2007,9 +2012,10 @@ function openInvestmentForm(id){
     +'<div style="font-size:11px;color:var(--ink-faint);margin-top:6px;" id="invCashValNote">'+(inv && inv.cashValueSource === 'manual' ? '&#9998; Manual override — auto-refresh will not overwrite. <a href="#" id="resetCashAuto" style="color:var(--blue);">Reset to auto</a>' : (inv && inv.cashValueSource === 'auto' ? '&#x2713; Auto-calculated from NAV + live FX rates' : 'Will be calculated automatically on next NAV refresh.'))+'</div>'
     +'</div>'
     +'<div style="margin-top:14px;padding:12px;background:var(--surface);border-radius:8px;border:1px solid var(--line);">'
-    +'<div style="font-size:12px;font-weight:600;margin-bottom:10px;">Monthly Premium Auto-Apply <span style="font-weight:400;color:var(--ink-faint);">— set once, then one click each month updates unit counts automatically</span></div>'
+    +'<div style="font-size:12px;font-weight:600;margin-bottom:10px;">Premium Auto-Apply <span style="font-weight:400;color:var(--ink-faint);">— set once, then one click each payment updates unit counts automatically</span></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
-    +'<label>Monthly Premium (SGD)<input name="ilpMonthlyPremium" type="number" step="0.01" min="0" value="'+esc(ilpVal('ilpMonthlyPremium','')||'')+'" placeholder="e.g. 700"></label>'
+    +'<label>Premium Amount (SGD)<input name="ilpMonthlyPremium" type="number" step="0.01" min="0" value="'+esc(ilpVal('ilpMonthlyPremium','')||'')+'" placeholder="e.g. 700 or 7000"></label>'
+    +'<label>Premium Frequency<select name="ilpPremiumFrequency"><option value="monthly"'+(ilpVal('ilpPremiumFrequency','monthly')==='monthly'?' selected':'')+'>Monthly</option><option value="annually"'+(ilpVal('ilpPremiumFrequency','monthly')==='annually'?' selected':'')+'>Annually</option></select></label>'
     +'<label>Policy Start Date<input name="ilpPolicyStartDate" type="date" value="'+esc(ilpVal('ilpPolicyStartDate','')||'')+'"></label>'
     +'<label>IUA / Tier-1 Period (months)<input name="ilpIuaPeriodMonths" type="number" min="0" value="'+esc(ilpVal('ilpIuaPeriodMonths',0))+'" placeholder="e.g. 18 or 120"></label>'
     +'<label>Monthly Policy Fee (SGD) <span style="font-size:10px;color:var(--ink-faint);">0 if fee is % of value</span><input name="ilpMonthlyFee" type="number" step="0.01" min="0" value="'+esc(ilpVal('ilpMonthlyFee',0))+'" placeholder="e.g. 5"></label>'
@@ -2071,6 +2077,7 @@ function openInvestmentForm(id){
     const cvSource = cvNum && cvNum !== prevCV ? 'manual' : (inv ? (inv.cashValueSource||'auto') : 'auto');
     const fields = { clientId: fd.get('clientId'), product: fd.get('product'), policyNo: fd.get('policyNo'), linkedPolicyId: linkedPolicyId, cashValue: cvNum||0, cashValueDate: fd.get('cashValueDate')||'', cashValueSource: cvSource,
       ilpMonthlyPremium: parseFloat(fd.get('ilpMonthlyPremium'))||0,
+      ilpPremiumFrequency: fd.get('ilpPremiumFrequency')||'monthly',
       ilpPolicyStartDate: fd.get('ilpPolicyStartDate')||'',
       ilpIuaPeriodMonths: parseInt(fd.get('ilpIuaPeriodMonths')) || 0,
       ilpAllocationRateIUA: parseFloat(fd.get('ilpAllocationRateIUA')) || 100,
