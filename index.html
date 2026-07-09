@@ -1521,15 +1521,21 @@ function renderInvestmentDetail(main){
     +(displayCashVal > 0 && premiumsDisplay
       ? (function(){
           const bonus = computeAllocationBonus(inv, premiumsDisplay);
-          const gainWithBonus = gainSGD; // displayCashVal - premiumsDisplay
+          const gainWithBonus = gainSGD;
           const fundGain = bonus ? parseFloat((displayCashVal - bonus.notionalCost).toFixed(2)) : null;
           const fundGainPct = bonus && bonus.notionalCost ? fundGain / bonus.notionalCost * 100 : null;
+          const hasBonus = bonus && Math.abs(bonus.allocationBonus) >= 0.01;
           return '<div class="card" style="padding:16px 20px;min-width:200px;">'
             +'<div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;">Overall Gain / Loss (SGD)</div>'
             +'<div style="font-size:22px;font-weight:700;margin-top:4px;" class="'+perfClass(gainWithBonus)+'">'+(gainWithBonus>=0?'+':'')+fmtMoney(gainWithBonus)+'</div>'
-            +'<div style="font-size:13px;margin-top:2px;" class="'+perfClass(gainWithBonus)+'">'+fmtPct(gainSGDPct)+' <span style="font-weight:400;font-size:11px;color:var(--ink-faint);">incl. allocation bonus</span></div>'
-            +(bonus
-              ? '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;">'
+            +(hasBonus
+              ? '<div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap;">'
+                +'<div><div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.4px;">Incl. Bonus</div>'
+                +'<div style="font-size:15px;font-weight:700;" class="'+perfClass(gainWithBonus)+'">'+fmtPct(gainSGDPct)+'</div></div>'
+                +'<div><div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.4px;">Net Fund Performance</div>'
+                +'<div style="font-size:15px;font-weight:700;" class="'+perfClass(fundGain)+'">'+fmtPct(fundGainPct)+'</div></div>'
+                +'</div>'
+                +'<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;">'
                 +'<div><div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.4px;">Allocation Bonus</div>'
                 +'<div style="font-size:14px;font-weight:700;" class="'+perfClass(bonus.allocationBonus)+'">'+(bonus.allocationBonus>=0?'+':'')+fmtMoney(bonus.allocationBonus)+'</div>'
                 +'<div style="font-size:11px;color:var(--ink-faint);">'+fmtPct(bonus.allocationBonus/premiumsDisplay*100)+' of premiums</div></div>'
@@ -1537,7 +1543,8 @@ function renderInvestmentDetail(main){
                 +'<div style="font-size:14px;font-weight:700;" class="'+perfClass(fundGain)+'">'+(fundGain>=0?'+':'')+fmtMoney(fundGain)+'</div>'
                 +'<div style="font-size:11px;color:var(--ink-faint);">'+fmtPct(fundGainPct)+' on allocated cost</div></div>'
                 +'</div>'
-              : '')
+              : '<div style="font-size:13px;margin-top:4px;" class="'+perfClass(gainWithBonus)+'">'+fmtPct(gainSGDPct)+' net fund performance</div>'
+            )
             +'</div>';
         })()
       : '')
