@@ -465,6 +465,304 @@ const PRODUCT_CATALOG = [
   { category:'Savings & ILPs', name:'Pulsar', desc:'A regular premium ILP with a partial withdrawal facility. Remind client to plan ahead — submit the withdrawal form 30 days before the intended date (5–7 working days processing).' },
 ];
 const CATALOG_CATEGORIES = [...new Set(PRODUCT_CATALOG.map(p => p.category))];
+
+// Product knowledge base — shown in the "ℹ Product Info" modal on each policy card.
+const PRODUCT_INFO = {
+  'Enhanced IncomeShield Preferred': {
+    insurer: 'Income Insurance Limited (NTUC Income)',
+    type: 'Integrated Shield Plan (IP)',
+    ward: 'Private Hospital & Class A (Restructured Hospital)',
+    sections: [
+      { title: 'Coverage', items: [
+        'Hospitalisation & surgical expenses — Private Hospitals & Class A wards',
+        'Pre-hospitalisation specialist consultations: up to 180 days before admission',
+        'Post-hospitalisation follow-up treatment: up to 365 days after discharge',
+        'Emergency overseas medical treatment covered',
+        'No overall annual or lifetime benefit limit',
+      ]},
+      { title: 'Deductible (per policy year)', items: [
+        'Class A ward: SGD 3,500',
+        'Private Hospital: SGD 3,500',
+        'Age 80 & above: higher deductible applies — refer to latest benefit schedule',
+      ]},
+      { title: 'Co-insurance', items: [
+        '10% of claimable amount above the deductible',
+        'Reducible to 0% with the IncomeShield Plus Rider (cash rider)',
+      ]},
+      { title: 'MediSave Usage', items: [
+        'Premiums payable using MediSave (subject to MediSave withdrawal limits)',
+        'Cash premium top-up required for the balance',
+      ]},
+      { title: 'Key Riders', items: [
+        'IncomeShield Plus Rider — eliminates co-insurance and deductible (cash premium)',
+      ]},
+    ],
+    note: 'Verify deductible amounts and MediSave limits with the latest Income product brochure as they may be updated annually.',
+  },
+  'Enhanced IncomeShield Advantage': {
+    insurer: 'Income Insurance Limited (NTUC Income)',
+    type: 'Integrated Shield Plan (IP)',
+    ward: 'Class A (Restructured Hospital)',
+    sections: [
+      { title: 'Coverage', items: [
+        'Hospitalisation & surgical expenses — Class A wards in restructured hospitals',
+        'Pre-hospitalisation specialist consultations: up to 180 days before admission',
+        'Post-hospitalisation follow-up treatment: up to 365 days after discharge',
+        'Emergency overseas medical treatment covered',
+        'No overall annual or lifetime benefit limit',
+      ]},
+      { title: 'Deductible (per policy year)', items: [
+        'Class A ward: SGD 3,500',
+        'Age 80 & above: higher deductible applies — refer to latest benefit schedule',
+      ]},
+      { title: 'Co-insurance', items: [
+        '10% of claimable amount above the deductible',
+        'Reducible with IncomeShield Plus Rider',
+      ]},
+      { title: 'MediSave Usage', items: [
+        'Premiums payable using MediSave (subject to MediSave withdrawal limits)',
+        'Cash top-up required for balance',
+      ]},
+      { title: 'Key Riders', items: [
+        'IncomeShield Plus Rider — eliminates co-insurance and deductible (cash premium)',
+      ]},
+    ],
+    note: 'Verify deductible amounts and MediSave limits with the latest Income product brochure as they may be updated annually.',
+  },
+  'Enhanced IncomeShield Basic': {
+    insurer: 'Income Insurance Limited (NTUC Income)',
+    type: 'Integrated Shield Plan (IP)',
+    ward: 'Class B1 (Restructured Hospital)',
+    sections: [
+      { title: 'Coverage', items: [
+        'Hospitalisation & surgical expenses — Class B1 wards in restructured hospitals',
+        'Pre-hospitalisation specialist consultations: up to 90 days before admission',
+        'Post-hospitalisation follow-up treatment: up to 180 days after discharge',
+        'Emergency overseas medical treatment covered',
+        'No overall annual or lifetime benefit limit',
+      ]},
+      { title: 'Deductible (per policy year)', items: [
+        'Class B1 ward: SGD 2,000',
+        'Age 80 & above: higher deductible applies — refer to latest benefit schedule',
+      ]},
+      { title: 'Co-insurance', items: [
+        '10% of claimable amount above the deductible',
+      ]},
+      { title: 'MediSave Usage', items: [
+        'Fully payable using MediSave (no cash top-up required for most age bands)',
+      ]},
+    ],
+    note: 'Verify deductible amounts and MediSave limits with the latest Income product brochure as they may be updated annually.',
+  },
+  'Enhanced IncomeShield': {
+    insurer: 'Income Insurance Limited (NTUC Income)',
+    type: 'Integrated Shield Plan (IP)',
+    ward: 'Refer to specific tier (Preferred / Advantage / Basic)',
+    sections: [
+      { title: 'Overview', items: [
+        'Integrated Shield Plan layered on top of MediShield Life',
+        'Covers hospitalisation and surgical expenses beyond MediShield Life limits',
+        'Available in Preferred (Private/Class A), Advantage (Class A), and Basic (Class B1) tiers',
+        'No overall annual or lifetime benefit limit',
+      ]},
+      { title: 'MediSave Usage', items: [
+        'Premiums payable via MediSave, subject to withdrawal limits',
+        'Cash top-up may be required depending on tier and age',
+      ]},
+    ],
+    note: 'Refer to the specific tier (Preferred / Advantage / Basic) for exact ward entitlements, deductibles, and co-insurance figures.',
+  },
+  'IncomeShield': {
+    insurer: 'Income Insurance Limited (NTUC Income)',
+    type: 'MediShield Life Equivalent (Non-Integrated)',
+    ward: 'Class B2 / C (Restructured Hospital)',
+    sections: [
+      { title: 'Coverage', items: [
+        'Covers hospitalisation in Class B2 and C wards of restructured hospitals',
+        'Surgical and treatment expenses covered',
+        'Integrated with MediShield Life',
+      ]},
+      { title: 'MediSave Usage', items: [
+        'Fully payable using MediSave',
+      ]},
+    ],
+    note: 'Basic plan — clients who want Class A or Private Hospital coverage should consider upgrading to Enhanced IncomeShield.',
+  },
+  'IncomeShield Standard Plan': {
+    insurer: 'Income Insurance Limited (NTUC Income)',
+    type: 'Standard Integrated Shield Plan',
+    ward: 'Class B1 (Restructured Hospital)',
+    sections: [
+      { title: 'Coverage', items: [
+        'Hospitalisation in Class B1 wards of restructured hospitals',
+        'Surgical and treatment expenses',
+        'Integrated with MediShield Life',
+      ]},
+      { title: 'MediSave Usage', items: [
+        'Primarily payable using MediSave',
+      ]},
+    ],
+    note: 'Standard government-defined IP — no add-on riders available.',
+  },
+  'Pulsar': {
+    insurer: 'HSBC Life',
+    type: 'Regular Premium Investment-Linked Plan (ILP)',
+    ward: null,
+    sections: [
+      { title: 'Structure', items: [
+        'Initial Units Account (IUA): first 18 months — 168% allocation rate',
+        'Accumulation Units Account (AUA): month 19 onwards — 100% allocation rate',
+        'Bid-offer spread: 5% during IUA period',
+        'Monthly policy fee: SGD 5 deducted from highest-value SGD fund',
+      ]},
+      { title: 'Key Features', items: [
+        'Wide fund selection across equity, bond, and money market categories',
+        'Partial withdrawal facility available from AUA (min. SGD 500)',
+        'Submit partial withdrawal form 30 days before intended date (5–7 working days processing)',
+        'Fund switching allowed — no charge',
+        'Death benefit: higher of account value or 105% of premiums paid',
+      ]},
+      { title: 'Charges', items: [
+        'Fund management charge (FMC): varies by fund (typically 0.75%–2.0% p.a.)',
+        'No surrender penalty after premium payment term',
+      ]},
+    ],
+    note: 'The 168% IUA allocation creates an allocation bonus — ensure client understands this inflates early account value before fund performance is reflected.',
+  },
+  'Wealth Voyage': {
+    insurer: 'HSBC Life',
+    type: 'Regular Premium Investment-Linked Plan (ILP)',
+    ward: null,
+    sections: [
+      { title: 'Structure', items: [
+        '100% allocation rate throughout policy term',
+        'Bid-offer spread: 5%',
+        'Monthly policy fee: SGD 5',
+      ]},
+      { title: 'Key Features', items: [
+        'Regular premium ILP with 10-year premium payment term',
+        'Loyalty bonus: 5% of account value at end of year 10',
+        'Wide fund selection',
+        'Partial withdrawal and fund switching available',
+      ]},
+    ],
+    note: 'No IUA bonus unlike Pulsar — returns are purely driven by fund performance.',
+  },
+  'Wealth Harvest': {
+    insurer: 'HSBC Life',
+    type: 'Regular Premium Investment-Linked Plan (ILP)',
+    ward: null,
+    sections: [
+      { title: 'Structure', items: [
+        '100% allocation rate throughout policy term',
+        'Bid-offer spread: 5%',
+        'Monthly policy fee: SGD 5',
+      ]},
+      { title: 'Key Features', items: [
+        'Regular premium ILP with 15-year premium payment term',
+        'Loyalty bonus: 8% of account value at end of year 15',
+        'Wide fund selection',
+        'Partial withdrawal and fund switching available',
+      ]},
+    ],
+  },
+  'Wealth Accelerate': {
+    insurer: 'HSBC Life',
+    type: 'Regular Premium Investment-Linked Plan (ILP)',
+    ward: null,
+    sections: [
+      { title: 'Structure', items: [
+        '100% allocation rate with no bid-offer spread',
+        'Monthly policy fee: SGD 5',
+      ]},
+      { title: 'Key Features', items: [
+        'Regular premium ILP designed for long-term wealth accumulation',
+        'No bid-offer spread — full premium invested from day one',
+        'Fund switching available',
+      ]},
+    ],
+  },
+  'Invest Flex': {
+    insurer: 'Income Insurance Limited (NTUC Income)',
+    type: 'Regular Premium Investment-Linked Plan (ILP)',
+    ward: null,
+    sections: [
+      { title: 'Allocation Rates', items: [
+        'Months 1–120 (years 1–10): 100% allocation',
+        'Months 121–240 (years 11–20): 102% allocation',
+        'Month 241+ (year 21+): 105% allocation',
+        'No bid-offer spread — premiums invested at bid price',
+      ]},
+      { title: 'Policy Fee', items: [
+        'Years 1–10: 2.5% p.a. of policy value (deducted monthly by cancelling units)',
+        'Year 11+: 0.5% p.a. of policy value',
+      ]},
+      { title: 'Investment Bonus', items: [
+        'One-time bonus credited for first 12 months of policy only',
+        '10-year MIP, annual premium < SGD 9,600: 10% bonus',
+        '10-year MIP, annual premium ≥ SGD 9,600: 25% bonus',
+        '15-year MIP, annual premium < SGD 9,600: 15% bonus',
+        '15-year MIP, annual premium ≥ SGD 9,600: 45% bonus',
+        '20-year MIP, annual premium < SGD 9,600: 30% bonus',
+        '20-year MIP, annual premium ≥ SGD 9,600: 60% bonus',
+      ]},
+      { title: 'Loyalty Bonus', items: [
+        '0.5% of policy value p.a. from 10th policy anniversary (or end of MIP, whichever later)',
+        'Condition: no withdrawals in the past 12 months',
+      ]},
+      { title: 'Surrender Charges', items: [
+        'Years 1–2: 100% of surrender value (no refund)',
+        'Declining schedule thereafter — refer to policy contract for exact figures by MIP',
+      ]},
+    ],
+    note: 'Investment bonus is only for the first 12 months and should be highlighted as a key early benefit when discussing this product with clients.',
+  },
+  'Invest Flex Vantage': {
+    insurer: 'Income Insurance Limited (NTUC Income)',
+    type: 'Regular Premium Investment-Linked Plan (ILP)',
+    ward: null,
+    sections: [
+      { title: 'Overview', items: [
+        'ILP product by NTUC Income — product details to be updated when policy contract is available',
+      ]},
+    ],
+    note: 'Update this product information when the Invest Flex Vantage policy contract is available.',
+  },
+  'Star Term Protect': {
+    insurer: 'Income Insurance Limited (NTUC Income)',
+    type: 'Term Life Insurance',
+    ward: null,
+    sections: [
+      { title: 'Coverage', items: [
+        'Death benefit — lump sum payout to beneficiary',
+        'Terminal illness benefit — early payout on terminal illness diagnosis',
+        'Total and permanent disability (TPD) benefit',
+      ]},
+      { title: 'Key Features', items: [
+        'Level coverage throughout the policy term',
+        'Renewable and convertible options available',
+        'Optional critical illness rider available',
+      ]},
+    ],
+  },
+  'Complete Life Secure': {
+    insurer: 'Income Insurance Limited (NTUC Income)',
+    type: 'Whole Life Insurance',
+    ward: null,
+    sections: [
+      { title: 'Coverage', items: [
+        'Lifelong death and total permanent disability (TPD) protection',
+        'Critical illness coverage across multiple stages',
+        'Cash value accumulation over time',
+      ]},
+      { title: 'Key Features', items: [
+        'Coverage continues for life — no expiry',
+        'Participating policy — eligible for bonuses (non-guaranteed)',
+        'Surrender value available after initial period',
+      ]},
+    ],
+  },
+};
 const HOSPITAL_INSURANCE_PRODUCTS = ['Enhanced IncomeShield Preferred', 'Enhanced IncomeShield Advantage', 'Enhanced IncomeShield Basic', 'Enhanced IncomeShield', 'IncomeShield', 'IncomeShield Standard Plan'];
 const PARTIAL_WITHDRAWAL_PRODUCTS = ['Pulsar'];
 function isPulsarPolicy(p){ return PARTIAL_WITHDRAWAL_PRODUCTS.some(n => (p.name||'').toLowerCase().includes(n.toLowerCase())); }
@@ -876,7 +1174,7 @@ function policyCard(c, p){
   const es = expiryStatus(p);
   const status = p.status || 'In Force';
   const statusCls = status === 'In Force' ? 'ok' : status === 'Lapsed' ? 'danger' : 'neutral';
-  return `<div class="policy-card" style="border-left-color:${catColor(p.category)}"><div class="policy-top"><div><div class="policy-title">${esc(p.name)}</div><div class="policy-insurer">${esc(p.insurer||'—')} ${p.policyNumber ? '· '+esc(p.policyNumber) : ''}</div></div><div class="policy-actions"><span class="badge ${statusCls}">${esc(status)}</span><span class="badge neutral" style="background:${catColor(p.category)}22;color:${catColor(p.category)};">${esc(p.category||'Uncategorised')}</span><button class="icon-btn" data-action="open-policy-form" data-client="${c.id}" data-policy="${p.id}" title="Edit">${icon('edit')}</button><button class="icon-btn" data-action="delete-policy" data-client="${c.id}" data-policy="${p.id}" title="Delete">${icon('trash')}</button></div></div><div class="policy-dates"><div><span class="col-label">Inception</span><span class="val">${fmtDate(p.inceptionDate)}</span></div><div><span class="col-label">Expiry</span><span class="val">${fmtDate(p.expiryDate)} ${es?`<span class="badge ${es.cls}" style="margin-left:6px;">${es.label}</span>`:''}</span></div><div><span class="col-label">Maturity</span><span class="val">${HOSPITAL_INSURANCE_PRODUCTS.includes(p.name) ? 'N/A — renews annually' : fmtDate(p.maturityDate)}</span></div><div><span class="col-label">Premium due</span><span class="val">${p.premiumFrequency==='Single Premium' ? 'N/A' : fmtDate(p.premiumDueDate)} ${ps?`<span class="badge ${ps.cls}" style="margin-left:6px;">${ps.label}</span>`:''}</span></div></div><div class="policy-foot"><div><span class="premium-amt">${p.premiumAmount ? 'S$ '+Number(p.premiumAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</span><span class="premium-freq"> / ${esc(p.premiumFrequency||'—')}</span>${paymentMethodList(p).length ? `<span class="premium-freq"> · via ${esc(formatPaymentMethods(p))}</span>` : ''}${p.lastPaidDate ? `<span class="premium-freq"> · last paid ${fmtDate(p.lastPaidDate)}</span>` : ''}</div><div style="display:flex;gap:8px;">${p.premiumFrequency!=='Single Premium' && p.premiumDueDate ? `<button class="btn btn-ghost btn-sm" data-action="mark-paid" data-client="${c.id}" data-policy="${p.id}">${icon('check')} Mark premium paid</button>` : ''}</div></div>${isPulsarPolicy(p) && p.partialWithdrawalDate ? `<div style="margin-top:10px;padding:10px 14px;background:var(--amber-soft);border-radius:8px;font-size:13px;"><span style="font-weight:700;color:var(--amber);">Partial Withdrawal Planned</span> · S$ ${Number(p.partialWithdrawalAmount||0).toLocaleString(undefined,{minimumFractionDigits:2})} on ${fmtDate(p.partialWithdrawalDate)}${p.partialWithdrawalPurpose ? ' · '+esc(p.partialWithdrawalPurpose) : ''}<br><span style="color:var(--ink-soft);font-size:12px;">Submit form by ${fmtDate(new Date(new Date(p.partialWithdrawalDate+'T00:00:00').getTime()-30*86400000).toISOString().slice(0,10))} · 5–7 working days processing</span></div>` : ''}</div>`;
+  return `<div class="policy-card" style="border-left-color:${catColor(p.category)}"><div class="policy-top"><div><div class="policy-title">${esc(p.name)}</div><div class="policy-insurer">${esc(p.insurer||'—')} ${p.policyNumber ? '· '+esc(p.policyNumber) : ''}</div></div><div class="policy-actions"><span class="badge ${statusCls}">${esc(status)}</span><span class="badge neutral" style="background:${catColor(p.category)}22;color:${catColor(p.category)};">${esc(p.category||'Uncategorised')}</span>${PRODUCT_INFO[p.name] ? `<button class="icon-btn" data-action="open-product-info" data-product="${esc(p.name)}" title="Product info" style="font-size:15px;font-weight:700;color:var(--blue);">ℹ</button>` : ''}<button class="icon-btn" data-action="open-policy-form" data-client="${c.id}" data-policy="${p.id}" title="Edit">${icon('edit')}</button><button class="icon-btn" data-action="delete-policy" data-client="${c.id}" data-policy="${p.id}" title="Delete">${icon('trash')}</button></div></div><div class="policy-dates"><div><span class="col-label">Inception</span><span class="val">${fmtDate(p.inceptionDate)}</span></div><div><span class="col-label">Expiry</span><span class="val">${fmtDate(p.expiryDate)} ${es?`<span class="badge ${es.cls}" style="margin-left:6px;">${es.label}</span>`:''}</span></div><div><span class="col-label">Maturity</span><span class="val">${HOSPITAL_INSURANCE_PRODUCTS.includes(p.name) ? 'N/A — renews annually' : fmtDate(p.maturityDate)}</span></div><div><span class="col-label">Premium due</span><span class="val">${p.premiumFrequency==='Single Premium' ? 'N/A' : fmtDate(p.premiumDueDate)} ${ps?`<span class="badge ${ps.cls}" style="margin-left:6px;">${ps.label}</span>`:''}</span></div></div><div class="policy-foot"><div><span class="premium-amt">${p.premiumAmount ? 'S$ '+Number(p.premiumAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</span><span class="premium-freq"> / ${esc(p.premiumFrequency||'—')}</span>${paymentMethodList(p).length ? `<span class="premium-freq"> · via ${esc(formatPaymentMethods(p))}</span>` : ''}${p.lastPaidDate ? `<span class="premium-freq"> · last paid ${fmtDate(p.lastPaidDate)}</span>` : ''}</div><div style="display:flex;gap:8px;">${p.premiumFrequency!=='Single Premium' && p.premiumDueDate ? `<button class="btn btn-ghost btn-sm" data-action="mark-paid" data-client="${c.id}" data-policy="${p.id}">${icon('check')} Mark premium paid</button>` : ''}</div></div>${isPulsarPolicy(p) && p.partialWithdrawalDate ? `<div style="margin-top:10px;padding:10px 14px;background:var(--amber-soft);border-radius:8px;font-size:13px;"><span style="font-weight:700;color:var(--amber);">Partial Withdrawal Planned</span> · S$ ${Number(p.partialWithdrawalAmount||0).toLocaleString(undefined,{minimumFractionDigits:2})} on ${fmtDate(p.partialWithdrawalDate)}${p.partialWithdrawalPurpose ? ' · '+esc(p.partialWithdrawalPurpose) : ''}<br><span style="color:var(--ink-soft);font-size:12px;">Submit form by ${fmtDate(new Date(new Date(p.partialWithdrawalDate+'T00:00:00').getTime()-30*86400000).toISOString().slice(0,10))} · 5–7 working days processing</span></div>` : ''}</div>`;
 }
 
 /* ============================== SETTINGS ============================== */
@@ -1641,6 +1939,33 @@ function downloadCSVTemplate(type){
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(content);
   a.download = filename; a.click();
 }
+function openProductInfoModal(productName){
+  const info = PRODUCT_INFO[productName];
+  if(!info){ toast('No product information available for this product.','warn'); return; }
+  const badge = info.ward
+    ? '<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;background:var(--blue-soft,#EEF4FF);color:var(--blue);">'+esc(info.ward)+'</span>'
+    : '';
+  const sectionsHtml = (info.sections||[]).map(function(s){
+    return '<div style="margin-bottom:14px;">'
+      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:6px;">'+esc(s.title)+'</div>'
+      +'<ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;">'
+      +s.items.map(function(item){ return '<li style="font-size:13px;color:var(--ink);">'+esc(item)+'</li>'; }).join('')
+      +'</ul></div>';
+  }).join('');
+  const noteHtml = info.note
+    ? '<div style="margin-top:14px;padding:10px 12px;background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);border-radius:4px;font-size:12px;color:var(--ink-faint);">'+esc(info.note)+'</div>'
+    : '';
+  showModal(
+    '<div class="modal-header"><h3>'+esc(productName)+'</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
+    +'<div style="font-size:12px;color:var(--ink-faint);margin-bottom:4px;">'+esc(info.insurer)+' &nbsp;·&nbsp; '+esc(info.type)+'</div>'
+    +(badge ? '<div style="margin-bottom:14px;">'+badge+'</div>' : '<div style="margin-bottom:14px;"></div>')
+    +sectionsHtml
+    +noteHtml
+    +'<div style="display:flex;justify-content:flex-end;margin-top:16px;">'
+    +'<button class="btn btn-sm" data-action="close-modal">Close</button></div>'
+  );
+}
+
 function openImportCSV(invId){
   const inv = investments.find(function(i){ return i.id === invId; });
   if(!inv) return;
@@ -2249,6 +2574,7 @@ document.addEventListener('click', async (e) => {
   else if(action === 'view-client'){ view = { type:'client-detail', clientId: id }; render(); }
   else if(action === 'open-client-form'){ openClientForm(id); }
   else if(action === 'delete-client'){ deleteClient(id); }
+  else if(action === 'open-product-info'){ openProductInfoModal(t.dataset.product); }
   else if(action === 'open-policy-form'){ openPolicyForm(clientId, policyId); }
   else if(action === 'delete-policy'){ deletePolicy(clientId, policyId); }
   else if(action === 'mark-paid'){ markPaid(clientId, policyId); }
