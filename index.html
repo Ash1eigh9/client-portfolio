@@ -445,6 +445,9 @@ const CAT_PALETTE = ['#2F6F5E','#3D5A80','#9C6644','#6B4E71','#4C7A4C','#8A5A44'
 const PRODUCT_CATALOG = [
   { category:'Health Insurance', name:'Care Secure (CareShield Life Supplement)', desc:'Supplement your CareShield Life plan with enhanced long-term coverage against moderate and severe disabilities.' },
   { category:'Health Insurance', name:'Care Secure Pro (CareShield Life Supplement)', desc:'Provides comprehensive coverage across different stages of disability, from mild to severe.' },
+  { category:'Health Insurance', name:'Enhanced IncomeShield Preferred', desc:'Enhanced IncomeShield — Preferred tier, covers Class A ward and above.' },
+  { category:'Health Insurance', name:'Enhanced IncomeShield Advantage', desc:'Enhanced IncomeShield — Advantage tier, covers Class A ward and above.' },
+  { category:'Health Insurance', name:'Enhanced IncomeShield Basic', desc:'Enhanced IncomeShield — Basic tier, covers Class B1 ward and above.' },
   { category:'Health Insurance', name:'Enhanced IncomeShield', desc:"Unlimited lifetime coverage for medical and hospitalisation expenses from Singapore's most trusted health insurer." },
   { category:'Health Insurance', name:'IncomeShield', desc:'Covers hospital and surgical expenses and can be paid with your MediSave account.' },
   { category:'Health Insurance', name:'IncomeShield Standard Plan', desc:'Affordable protection for medical and hospitalisation expenses in the Class B1 ward.' },
@@ -462,7 +465,7 @@ const PRODUCT_CATALOG = [
   { category:'Savings & ILPs', name:'Pulsar', desc:'A regular premium ILP with a partial withdrawal facility. Remind client to plan ahead — submit the withdrawal form 30 days before the intended date (5–7 working days processing).' },
 ];
 const CATALOG_CATEGORIES = [...new Set(PRODUCT_CATALOG.map(p => p.category))];
-const HOSPITAL_INSURANCE_PRODUCTS = ['Enhanced IncomeShield', 'IncomeShield', 'IncomeShield Standard Plan'];
+const HOSPITAL_INSURANCE_PRODUCTS = ['Enhanced IncomeShield Preferred', 'Enhanced IncomeShield Advantage', 'Enhanced IncomeShield Basic', 'Enhanced IncomeShield', 'IncomeShield', 'IncomeShield Standard Plan'];
 const PARTIAL_WITHDRAWAL_PRODUCTS = ['Pulsar'];
 function isPulsarPolicy(p){ return PARTIAL_WITHDRAWAL_PRODUCTS.some(n => (p.name||'').toLowerCase().includes(n.toLowerCase())); }
 
