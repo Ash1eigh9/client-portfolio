@@ -1174,7 +1174,7 @@ function policyCard(c, p){
   const es = expiryStatus(p);
   const status = p.status || 'In Force';
   const statusCls = status === 'In Force' ? 'ok' : status === 'Lapsed' ? 'danger' : 'neutral';
-  return `<div class="policy-card" style="border-left-color:${catColor(p.category)}"><div class="policy-top"><div><div class="policy-title">${esc(p.name)}</div><div class="policy-insurer">${esc(p.insurer||'—')} ${p.policyNumber ? '· '+esc(p.policyNumber) : ''}</div></div><div class="policy-actions"><span class="badge ${statusCls}">${esc(status)}</span><span class="badge neutral" style="background:${catColor(p.category)}22;color:${catColor(p.category)};">${esc(p.category||'Uncategorised')}</span>${PRODUCT_INFO[p.name] ? `<button class="icon-btn" data-action="open-product-info" data-product="${esc(p.name)}" title="Product info" style="font-size:15px;font-weight:700;color:var(--blue);">ℹ</button>` : ''}<button class="icon-btn" data-action="open-policy-form" data-client="${c.id}" data-policy="${p.id}" title="Edit">${icon('edit')}</button><button class="icon-btn" data-action="delete-policy" data-client="${c.id}" data-policy="${p.id}" title="Delete">${icon('trash')}</button></div></div><div class="policy-dates"><div><span class="col-label">Inception</span><span class="val">${fmtDate(p.inceptionDate)}</span></div><div><span class="col-label">Expiry</span><span class="val">${fmtDate(p.expiryDate)} ${es?`<span class="badge ${es.cls}" style="margin-left:6px;">${es.label}</span>`:''}</span></div><div><span class="col-label">Maturity</span><span class="val">${HOSPITAL_INSURANCE_PRODUCTS.includes(p.name) ? 'N/A — renews annually' : fmtDate(p.maturityDate)}</span></div><div><span class="col-label">Premium due</span><span class="val">${p.premiumFrequency==='Single Premium' ? 'N/A' : fmtDate(p.premiumDueDate)} ${ps?`<span class="badge ${ps.cls}" style="margin-left:6px;">${ps.label}</span>`:''}</span></div></div><div class="policy-foot"><div><span class="premium-amt">${p.premiumAmount ? 'S$ '+Number(p.premiumAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</span><span class="premium-freq"> / ${esc(p.premiumFrequency||'—')}</span>${paymentMethodList(p).length ? `<span class="premium-freq"> · via ${esc(formatPaymentMethods(p))}</span>` : ''}${p.lastPaidDate ? `<span class="premium-freq"> · last paid ${fmtDate(p.lastPaidDate)}</span>` : ''}</div><div style="display:flex;gap:8px;">${p.premiumFrequency!=='Single Premium' && p.premiumDueDate ? `<button class="btn btn-ghost btn-sm" data-action="mark-paid" data-client="${c.id}" data-policy="${p.id}">${icon('check')} Mark premium paid</button>` : ''}</div></div>${isPulsarPolicy(p) && p.partialWithdrawalDate ? `<div style="margin-top:10px;padding:10px 14px;background:var(--amber-soft);border-radius:8px;font-size:13px;"><span style="font-weight:700;color:var(--amber);">Partial Withdrawal Planned</span> · S$ ${Number(p.partialWithdrawalAmount||0).toLocaleString(undefined,{minimumFractionDigits:2})} on ${fmtDate(p.partialWithdrawalDate)}${p.partialWithdrawalPurpose ? ' · '+esc(p.partialWithdrawalPurpose) : ''}<br><span style="color:var(--ink-soft);font-size:12px;">Submit form by ${fmtDate(new Date(new Date(p.partialWithdrawalDate+'T00:00:00').getTime()-30*86400000).toISOString().slice(0,10))} · 5–7 working days processing</span></div>` : ''}</div>`;
+  return `<div class="policy-card" style="border-left-color:${catColor(p.category)}"><div class="policy-top"><div><div class="policy-title">${esc(p.name)}</div><div class="policy-insurer">${esc(p.insurer||'—')} ${p.policyNumber ? '· '+esc(p.policyNumber) : ''}</div></div><div class="policy-actions"><span class="badge ${statusCls}">${esc(status)}</span><span class="badge neutral" style="background:${catColor(p.category)}22;color:${catColor(p.category)};">${esc(p.category||'Uncategorised')}</span>${PRODUCT_INFO[p.name] ? `<button class="icon-btn" data-action="open-product-info" data-product="${esc(p.name)}" title="Product info" style="font-size:15px;font-weight:700;color:var(--blue);">ℹ</button>` : ''}<button class="icon-btn" data-action="open-policy-form" data-client="${c.id}" data-policy="${p.id}" title="Edit">${icon('edit')}</button><button class="icon-btn" data-action="delete-policy" data-client="${c.id}" data-policy="${p.id}" title="Delete">${icon('trash')}</button></div></div><div class="policy-dates"><div><span class="col-label">Inception</span><span class="val">${fmtDate(p.inceptionDate)}</span></div><div><span class="col-label">Expiry</span><span class="val">${fmtDate(p.expiryDate)} ${es?`<span class="badge ${es.cls}" style="margin-left:6px;">${es.label}</span>`:''}</span></div><div><span class="col-label">Maturity</span><span class="val">${HOSPITAL_INSURANCE_PRODUCTS.includes(p.name) ? 'N/A — renews annually' : fmtDate(p.maturityDate)}</span></div><div><span class="col-label">Premium due</span><span class="val">${p.premiumFrequency==='Single Premium' ? 'N/A' : fmtDate(p.premiumDueDate)} ${ps?`<span class="badge ${ps.cls}" style="margin-left:6px;">${ps.label}</span>`:''}</span></div></div><div class="policy-foot"><div><span class="premium-amt">${p.premiumAmount ? 'S$ '+Number(p.premiumAmount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</span><span class="premium-freq"> / ${esc(p.premiumFrequency||'—')}</span>${paymentMethodList(p).length ? `<span class="premium-freq"> · via ${esc(formatPaymentMethods(p))}</span>` : ''}${p.lastPaidDate ? `<span class="premium-freq"> · last paid ${fmtDate(p.lastPaidDate)}</span>` : ''}</div><div style="display:flex;gap:8px;">${p.premiumFrequency!=='Single Premium' ? `<button class="btn btn-ghost btn-sm" data-action="edit-premium" data-client="${c.id}" data-policy="${p.id}" title="Correct premium details">${icon('edit')} Edit premium</button>` : ''}${p.premiumFrequency!=='Single Premium' && p.premiumDueDate ? `<button class="btn btn-ghost btn-sm" data-action="mark-paid" data-client="${c.id}" data-policy="${p.id}">${icon('check')} Mark premium paid</button>` : ''}</div></div>${isPulsarPolicy(p) && p.partialWithdrawalDate ? `<div style="margin-top:10px;padding:10px 14px;background:var(--amber-soft);border-radius:8px;font-size:13px;"><span style="font-weight:700;color:var(--amber);">Partial Withdrawal Planned</span> · S$ ${Number(p.partialWithdrawalAmount||0).toLocaleString(undefined,{minimumFractionDigits:2})} on ${fmtDate(p.partialWithdrawalDate)}${p.partialWithdrawalPurpose ? ' · '+esc(p.partialWithdrawalPurpose) : ''}<br><span style="color:var(--ink-soft);font-size:12px;">Submit form by ${fmtDate(new Date(new Date(p.partialWithdrawalDate+'T00:00:00').getTime()-30*86400000).toISOString().slice(0,10))} · 5–7 working days processing</span></div>` : ''}</div>`;
 }
 
 /* ============================== SETTINGS ============================== */
@@ -1400,6 +1400,35 @@ async function markPaid(clientId, policyId){
   d.setMonth(d.getMonth() + months); p.lastPaidDate = new Date().toISOString().slice(0,10); p.premiumDueDate = d.toISOString().slice(0,10);
   await saveOneClient(c); toast('Marked paid — next due ' + fmtDate(p.premiumDueDate)); render();
 }
+function openEditPremiumModal(clientId, policyId){
+  const c = findClient(clientId);
+  const p = c && (c.policies||[]).find(function(x){ return x.id===policyId; });
+  if(!p) return;
+  showModal(
+    '<div class="modal-header"><h3>Edit Premium Details</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
+    +'<p style="font-size:12px;color:var(--ink-faint);margin:0 0 14px;">Correct the premium amount, last paid date, or next due date without changing any other policy details.</p>'
+    +'<form id="editPremForm" style="display:flex;flex-direction:column;gap:12px;">'
+    +'<label>Premium Amount (SGD)<input name="premiumAmount" type="number" step="0.01" min="0" value="'+esc(p.premiumAmount||'')+'" placeholder="e.g. 150.00"></label>'
+    +'<label>Last Paid Date<input name="lastPaidDate" type="date" value="'+esc(p.lastPaidDate||'')+'"></label>'
+    +'<label>Next Premium Due Date<input name="premiumDueDate" type="date" value="'+esc(p.premiumDueDate||'')+'"></label>'
+    +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">'
+    +'<button type="button" class="btn btn-sm" data-action="close-modal">Cancel</button>'
+    +'<button type="submit" class="btn btn-primary">Save</button>'
+    +'</div></form>'
+  );
+  document.getElementById('editPremForm').onsubmit = async function(e){
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    if(fd.get('premiumAmount') !== '') p.premiumAmount = fd.get('premiumAmount');
+    if(fd.get('lastPaidDate'))   p.lastPaidDate   = fd.get('lastPaidDate');
+    if(fd.get('premiumDueDate')) p.premiumDueDate = fd.get('premiumDueDate');
+    await saveOneClient(c);
+    closeModal();
+    toast('Premium details updated.');
+    render();
+  };
+}
+
 async function markContact(clientId){
   const c = findClient(clientId); if(!c) return;
   c.lastContactedDate = new Date().toISOString().slice(0,10); await saveOneClient(c); toast('Logged contact with ' + c.name + '.'); render();
@@ -2620,6 +2649,7 @@ document.addEventListener('click', async (e) => {
   else if(action === 'open-product-info'){ openProductInfoModal(t.dataset.product); }
   else if(action === 'open-policy-form'){ openPolicyForm(clientId, policyId); }
   else if(action === 'delete-policy'){ deletePolicy(clientId, policyId); }
+  else if(action === 'edit-premium'){ openEditPremiumModal(clientId, policyId); }
   else if(action === 'mark-paid'){ markPaid(clientId, policyId); }
   else if(action === 'log-contact'){ markContact(id); }
   else if(action === 'close-modal'){ closeModal(); }
