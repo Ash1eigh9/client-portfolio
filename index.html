@@ -1786,7 +1786,10 @@ function renderInvestmentDetail(main){
       +'<td style="text-align:right;">'+fmtMoney(t.units,4)+'</td>'
       +'<td style="text-align:right;">'+fmtMoney(t.price,4)+'</td>'
       +'<td style="text-align:right;">'+(t.amount ? esc(inv.currency||'SGD')+' '+fmtMoney(t.amount) : '—')+'</td>'
-      +'<td style="text-align:right;"><button class="btn btn-sm" style="color:var(--red);" data-action="delete-transaction" data-inv="'+esc(inv.id)+'" data-tx="'+esc(t.id)+'" title="Remove">'+icon('trash')+'</button></td>'
+      +'<td style="text-align:right;display:flex;gap:4px;justify-content:flex-end;">'
+      +'<button class="btn btn-sm" data-action="edit-transaction" data-inv="'+esc(inv.id)+'" data-tx="'+esc(t.id)+'" title="Edit">'+icon('edit')+'</button>'
+      +'<button class="btn btn-sm" style="color:var(--red);" data-action="delete-transaction" data-inv="'+esc(inv.id)+'" data-tx="'+esc(t.id)+'" title="Remove">'+icon('trash')+'</button>'
+      +'</td>'
       +'</tr>';
   }).join('');
   main.innerHTML = '<div class="content">'
@@ -2158,6 +2161,46 @@ async function deleteTransaction(invId, txId){
   await saveOneInvestment(inv);
   render();
   toast('Transaction removed.');
+}
+
+function openEditTransactionModal(invId, txId){
+  const inv = investments.find(function(i){ return i.id===invId; });
+  if(!inv) return;
+  const tx = (inv.transactions||[]).find(function(t){ return t.id===txId; });
+  if(!tx) return;
+  const typeOpts = ['Regular Premium','Top-up','Partial Withdrawal','Switch In','Switch Out','Initial Premium','Bonus','Other']
+    .map(function(o){ return '<option value="'+esc(o)+'"'+(tx.type===o?' selected':'')+'>'+esc(o)+'</option>'; }).join('');
+  showModal(
+    '<div class="modal-header"><h3>Edit Transaction</h3><button class="icon-btn" data-action="close-modal">&#x2715;</button></div>'
+    +'<form id="editTxForm" style="display:flex;flex-direction:column;gap:12px;">'
+    +'<label>Date<input name="date" type="date" value="'+esc(tx.date||'')+'" required></label>'
+    +'<label>Fund Name<input name="fundName" type="text" value="'+esc(tx.fundName||'')+'" required></label>'
+    +'<label>Type<select name="type">'+typeOpts+'</select></label>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    +'<label>Units<input name="units" type="number" step="0.000001" value="'+esc(tx.units||'')+'" placeholder="e.g. 12.3456"></label>'
+    +'<label>Price (NAV)<input name="price" type="number" step="0.0001" value="'+esc(tx.price||'')+'" placeholder="e.g. 1.2345"></label>'
+    +'</div>'
+    +'<label>Amount (SGD) <span style="font-size:11px;color:var(--ink-faint);">— used for premiums paid calculation</span><input name="amount" type="number" step="0.01" value="'+esc(tx.amount||'')+'" placeholder="e.g. 700.00"></label>'
+    +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">'
+    +'<button type="button" class="btn btn-sm" data-action="close-modal">Cancel</button>'
+    +'<button type="submit" class="btn btn-primary">Save Changes</button>'
+    +'</div></form>'
+  );
+  document.getElementById('editTxForm').onsubmit = async function(e){
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    tx.date     = fd.get('date')||tx.date;
+    tx.fundName = fd.get('fundName')||tx.fundName;
+    tx.type     = fd.get('type')||tx.type;
+    tx.units    = parseFloat(fd.get('units'))||tx.units;
+    tx.price    = parseFloat(fd.get('price'))||tx.price;
+    tx.amount   = fd.get('amount') !== '' ? parseFloat(fd.get('amount')) : tx.amount;
+    inv.transactions.sort(function(a,b){ return b.date.localeCompare(a.date); });
+    await saveOneInvestment(inv);
+    closeModal();
+    toast('Transaction updated.');
+    if(view.type==='investment-detail') render();
+  };
 }
 
 /* ============================== INVESTMENTS — MODALS ============================== */
@@ -2596,6 +2639,7 @@ document.addEventListener('click', async (e) => {
   else if(action === 'open-import-csv'){ openImportCSV(id); }
   else if(action === 'open-update-values'){ openUpdateValuesModal(id); }
   else if(action === 'apply-premium'){ openApplyPremiumModal(id); }
+  else if(action === 'edit-transaction'){ openEditTransactionModal(t.dataset.inv, t.dataset.tx); }
   else if(action === 'delete-transaction'){ deleteTransaction(t.dataset.inv, t.dataset.tx); }
 });
 
